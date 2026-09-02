@@ -1,0 +1,71 @@
+﻿MEDIA FILES: [] count 0
+.\.venv\Scripts\python : Traceback (most recent call last):
+At C:\Users\Nitesh\AppData\Local\Temp\ps-script-f5e18b6c-2222-4ac9-b7cc-abc082a2669f.ps1:112 char:165
++ ... ONPATH="."; .\.venv\Scripts\python scripts\parse_docx_grey2.py 2>&1 | ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Traceback (most recent call last)::String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+SHADING FILLS: [('141414', 167), ('efefef', 42)]
+
+=== GREY SHADED / FILLED ITEMS ===
+[cell EFEFEF] Field Name
+[cell EFEFEF] Control Type
+[cell EFEFEF] Data Type
+[cell EFEFEF] Required?
+[cell EFEFEF] Validation Rules
+[cell EFEFEF] Error Message / Notes
+[cell EFEFEF] Field Name
+[cell EFEFEF] Control Type
+[cell EFEFEF] Data Type
+[cell EFEFEF] Required?
+[cell EFEFEF] Validation Rules
+[cell EFEFEF] Error Message / Notes
+[cell EFEFEF] Field Name
+[cell EFEFEF] Control Type
+[cell EFEFEF] Data Type
+[cell EFEFEF] Required?
+[cell EFEFEF] Validation Rules
+[cell EFEFEF] Error Message / Notes
+[cell EFEFEF] Field Name
+[cell EFEFEF] Control Type
+[cell EFEFEF] Data Type
+[cell EFEFEF] Required?
+[cell EFEFEF] Validation Rules
+[cell EFEFEF] Error Message / Notes
+[cell EFEFEF] Field Name
+[cell EFEFEF] Control Type
+[cell EFEFEF] Data Type
+[cell EFEFEF] Required?
+[cell EFEFEF] Validation Rules (Client & Server)
+[cell EFEFEF] Error Message / Notes
+[cell EFEFEF] Field Name
+[cell EFEFEF] Control Type
+[cell EFEFEF] Data Type
+[cell EFEFEF] Required?
+[cell EFEFEF] Validation Rules (Client & Server)
+[cell EFEFEF] Error Message / Edge Case
+[cell EFEFEF] Field Name
+[cell EFEFEF] Control Type
+[cell EFEFEF] Data Type
+[cell EFEFEF] Required?
+[cell EFEFEF] Validation Rules
+[cell EFEFEF] Error Message / Notes
+
+TOTAL: 42
+
+=== FULL DOCUMENT TEXT (first 200 lines) ===
+001| Technical Design Document (TDD): Commodity Trading & ERP System
+002| 1. System Overview & Scope
+003| 1.1 Executive Summary
+004| This Technical Design Document (TDD) outlines the structural layout, screen specifications, field-level validation rules, database persistence models, and end-to-end execution workflows for the Commodity Trading & ERP Management System.
+005| The application manages the complete lifecycle of physical commodity tradingùfrom core master entity configuration (Commodities, Weightment Terms, Brokers, Tax Structures, and Chart of Accounts) through Contract Execution, Despatch Tracking, and Bill Generation/Invoicing.
+006| 1.2 Module Architecture
+  File "C:\Users\Nitesh\.cursor\projects\C-Users-Nitesh-AppData-Local-Temp-21d91ae9-4995-454f-8762-a7f2d7f5d1fd\tradesw
+ift-erp-backend\scripts\parse_docx_grey2.py", line 106, in <module>
+    print(f"{i:03d}| {line}")
+  File "C:\Users\Nitesh\AppData\Local\Programs\Python\Python312\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 5-80: character maps to <undefined>

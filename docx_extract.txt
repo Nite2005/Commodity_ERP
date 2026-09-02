@@ -1,0 +1,420 @@
+Technical Design Document (TDD): Commodity Trading & ERP System
+1. System Overview & Scope
+1.1 Executive Summary
+This Technical Design Document (TDD) outlines the structural layout, screen specifications, field-level validation rules, database persistence models, and end-to-end execution workflows for the Commodity Trading & ERP Management System.
+The application manages the complete lifecycle of physical commodity trading—from core master entity configuration (Commodities, Weightment Terms, Brokers, Tax Structures, and Chart of Accounts) through Contract Execution, Despatch Tracking, and Bill Generation/Invoicing.
+1.2 Module Architecture
+┌─────────────────────────────────────────────────────────────────────────┐│                        1. MASTER MANAGEMENT                             ││   [Commodity Master] [Weightment Master] [Broker Master] [Tax Master]   │└────────────────────┬────────────────────────────────────────────────────┘                     │                     ▼┌─────────────────────────────────────────────────────────────────────────┐│                     2. PARTY & ACCOUNT MANAGEMENT                       ││                     [Chart of Accounts / Party Master]                  │└────────────────────┬────────────────────────────────────────────────────┘                     │                     ▼┌─────────────────────────────────────────────────────────────────────────┐│                        3. TRANSACTION PROCESSING                        ││   [Contract Entry] ──────> [Despatch Entry] ──────> [Bill Generation]   │└────────────────────┬────────────────────────────────────────────────────┘                     │                     ▼┌─────────────────────────────────────────────────────────────────────────┐│                      4. REPORTING & ANALYTICS                           ││   [Contract Registers]   [Sales Registers]   [Brokerage Reports]        │└─────────────────────────────────────────────────────────────────────────┘
+2. Screen Specifications & Field Validations
+2.1 Master Management Module
+Screen 01: Commodity Master (SCR-COMM-01)
+Primary Objective: Define base physical commodities and default quality specs.
+Field Name
+Control Type
+Data Type
+Required?
+Validation Rules
+Error Message / Notes
+Commodity Name
+Text Input
+String (100)
+Yes
+Unique; Alphanumeric & spaces only
+"Commodity name already exists."
+Quality Allowance
+Textarea
+String (1000)
+No
+Free text (Quality specs: ICUMSA, Moisture %, etc.)
+Auto-populates into contracts.
+Comm Short Name
+Text Input
+String (30)
+Yes
+Max 30 chars; Upper-case converted
+"Short name required for reports."
+Screen 02: Units Master (SCR-WGHT-02)
+Primary Objective: Standardize terms for weight verification locations and conditions.
+Field Name
+Control Type
+Data Type
+Required?
+Validation Rules
+Error Message / Notes
+Unit Name
+Text Input
+String (150)
+Yes
+Unique; e.g., "FINAL AT LOADING AT EX-GODAM"
+"Weightment rule name required."
+Screen 03: Broker Master (SCR-BRK-03)
+Primary Objective: Store broker entities for trade commission tracking. (For internal use only)
+Field Name
+Control Type
+Data Type
+Required?
+Validation Rules
+Error Message / Notes
+Broker Name
+Text Input
+String (100)
+Yes
+Unique; Upper-case converted
+"Broker name cannot be empty."
+Screen 04: Tax Master (SCR-TAX-04)
+Primary Objective: Configure tax codes and applicable GST rate percentages.
+Field Name
+Control Type
+Data Type
+Required?
+Validation Rules
+Error Message / Notes
+Tax Code
+Text Input
+String (10)
+Yes (Auto)
+Read-only auto-generated primary key
+Primary ID
+Tax Name
+Text Input
+String (50)
+Yes
+Unique (e.g., "TAX FREE", "GST 5%")
+"Tax name required."
+IGST %
+Numeric
+Decimal (5,2)
+Yes
+Range: 0.00 to 100.00
+"Must be valid percentage."
+CGST %
+Numeric
+Decimal (5,2)
+Yes
+Range: 0.00 to 100.00
+"Must be valid percentage."
+SGST %
+Numeric
+Decimal (5,2)
+Yes
+Range: 0.00 to 100.00
+"Must be valid percentage."
+2.2 Chart of Accounts / Party Master (SCR-COA-05)
+Screen ID: SCR-COA-05
+Primary Objective: Maintain buyer, seller, and counterparty business details, multiple address locations, banking parameters, and statutory GST information.
+┌────────────────────────────────────────────────────────────────────────┐│ Chart Of Account                                                       │├────────────────────────────────────────────────────────────────────────┤│ Name:  [ SHIV SHANKAR OIL MILL (BHIWANI) (HARYANA)                   ] ││ Short: [ SHIV SHANKAR OIL MILL (BHIWANI) (HR)                        ] ││ ┌─ Address(es) [◄] 1 of 1 [►] ───────────────────────────────────────┐ ││ │ Contact: [ Mr. Amit ]             Location: [ Billing            ] │ ││ │ Phone:   [ 7015581040 ]           Fax:      [                    ] │ ││ │ Email:   [ dalmiasumit225@gmail.com                               ] │ ││ │ Address: [ Near Tosham Road, Tehsil Tosham, Kairu                  ] │ ││ │ City:    [ Bhiwani ]              Pincode:  [ 127029             ] │ ││ │ State:   [ HARYANA                ] Mobile: [ 7015581040         ] │ ││ └────────────────────────────────────────────────────────────────────┘ ││ ┌─ GST Detail ───────────────────────────────────────────────────────┐ ││ │ GST-TIN: [ 06COIPN0560E1Z6 ] Date: [ 10-07-2026 ] Type: [Registered]│ ││ └────────────────────────────────────────────────────────────────────┘ │└────────────────────────────────────────────────────────────────────────┘
+Field Matrix & Validation Rules
+Field Name
+Control Type
+Data Type
+Required?
+Validation Rules (Client & Server)
+Error Message / Notes
+Name
+Text Input
+String (150)
+Yes
+Unique; Length: 3 - 150 chars
+"Enter valid full legal entity name."
+Short
+Text Input
+String (50)
+Yes
+Length: 2 - 50 chars
+"Enter short name for reports."
+Contact Person
+Text Input
+String (100)
+No
+Alphabetic & spaces
+"Enter a valid contact person name."
+Location
+Dropdown/Text
+String (50)
+Yes
+Options: Billing, Shipping, Branch
+"Select address location type."
+Phone No(s)
+Text Input
+String (50)
+No
+Standard phone formatting
+"Invalid phone number."
+E-Mail
+Text Input
+String (100)
+No
+RFC 5322 Email regex pattern
+"Enter a valid email address."
+Address
+Multi-line
+String (300)
+Yes
+Max 3 lines, total 300 chars
+"Street address is required."
+City / Pincode
+Text Input
+String (50) / Num
+Yes
+Pincode: Exactly 6 digits (IN)
+"City & valid 6-digit Pincode required."
+State
+Dropdown
+String (50)
+Yes
+Standard Indian State list
+"Select State for GST state-code mapping."
+A/c No
+Text Input
+String (30)
+No
+Numeric / Alphanumeric
+"Enter valid bank account number."
+RTGS / IFSC
+Text Input
+String (11)
+No
+Regex: ^[A-Z]{4}0[A-Z0-9]{6}$
+"Enter valid 11-character IFSC code."
+GST-TIN No
+Text Input
+String (15)
+Conditional
+Regex: ^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$
+Required if Customer Type is Registered.
+GST Apply Date
+Date Picker
+Date
+Conditional
+Valid date format (DD-MM-YYYY)
+"Enter valid GST registration date."
+Customer Type
+Dropdown
+Enum
+Yes
+Registered, Unregistered, Composition, SEZ
+"Select valid GST customer registration type."
+2.3 Contract Entry (SCR-CNT-06)
+Screen ID: SCR-CNT-06
+Primary Objective: Capture legally binding purchase/sales trade contracts between buyers and sellers, including quantity allowances, payment terms, and brokerage rates.
+Field Matrix & Validation Rules
+Field Name
+Control Type
+Data Type
+Required?
+Validation Rules (Client & Server)
+Error Message / Edge Case
+Contract #
+Text Input
+String (20)
+Yes
+System auto-generated, but editable
+"Invoice/Confirmation No is auto-assigned."
+Type
+Dropdown
+Enum
+Yes
+Allowed: NEW, AMENDMENT, CANCEL
+"Select valid transaction type."
+Date
+Date Picker
+Date
+Yes
+Default: System Date (DD-MM-YYYY)
+"Invalid trade date."
+Seller
+Search/Select
+FK (COA)
+Yes
+Must be active Party; Cannot equal Buyer
+"Seller & Buyer cannot be the same party."
+Buyer
+Search/Select
+FK (COA)
+Yes
+Must be active Party; Cannot equal Seller
+"Seller & Buyer cannot be the same party."
+Nominee
+Checkbox
+Boolean
+No
+Indicates nominee trading on behalf of party
+Default: false
+Commodity
+Dropdown
+FK (Comm)
+Yes
+Auto-populates Quality Allowance
+"Select commodity from master."
+Quality Allowance
+Multi-line
+String (1000)
+No
+Defaults from Commodity Master; Editable
+Auto-updated on Commodity change.
+Packing
+Dropdown/Text
+String (100)
+Yes
+e.g., "IN OLD JUTE BAGS"
+"Packing details required."
+Qty Low / Unit
+Numeric/Drop
+Dec (10,2) / Enum
+Yes
+Qty > 0.00; Units: M.T., KGS, QUINTAL, BAGS
+"Quantity must be greater than zero."
+Qty High / Unit
+Numeric/Drop
+Dec (10,2) / Enum
+Yes
+Qty > 0.00; Units: M.T., KGS, QUINTAL, BAGS
+"Quantity must be greater than zero."
+Rate / In
+Numeric/Drop
+Dec (12,2) / Enum
+Yes
+Rate > 0.00; Currency: RUPEE, DOLLAR, EURO
+"Rate must be positive numeric value."
+Vat / Tax
+Dropdown
+FK (Tax)
+Yes
+Dropdown from Tax Master
+"Select tax schedule."
+Despatch Range
+Date Range
+Date (From/To)
+Yes
+To Date $\ge$ From Date
+"Despatch To Date must be on or after From Date."
+Broker Name
+Dropdown
+FK (Broker)
+Yes
+Dropdown from Broker Master
+"Assign broker to trade."
+Broker Rate
+Numeric
+Decimal (8,2)
+Yes
+Rate per metric unit or flat commission
+Defaults from Party/Broker settings.
+Print Options
+Checkboxes
+Flags
+No
+Options: DESPATCH/SI, TR/FINAL DOCS, PAYMENT
+System print flags
+Final quantity
+2.4 Contract Closure (SCR-CNT-07)
+Enter final quantity – to be used only for billing
+If not entered, should be equal to contracted qty high.
+2.5 Bill Generation (SCR-BIL-08)
+Screen ID: SCR-BIL-08
+Primary Objective: Aggregate unbilled despatches within a date range to generate sales invoices and calculate tax/brokerage liabilities.
+Field Matrix & Filtering Specification
+Field Name
+Control Type
+Data Type
+Required?
+Validation Rules
+Error Message / Notes
+Bill No
+Text Input
+String (20)
+Yes (Auto)
+Unique tax invoice number
+Primary Key
+Bill Date
+Date Picker
+Date
+Yes
+Default: Current Date (20-07-2026)
+Cannot be prior to Contract Date.
+From / To Date
+Date Range
+Date Range
+Yes
+Date range to query pending dispatches
+Filters unbilled shipments.
+Party Name
+Search Dropdown
+FK (COA)
+Yes
+Active customer account
+Filters grid items by Party.
+Tax
+Dropdown
+FK (Tax)
+Yes
+Auto-populates IGST, CGST, and SGST %
+Updates tax rate fields on change.
+IGST/CGST/SGST
+Text Input
+Decimal (5,2)
+Read-only
+Evaluated based on Intra-state vs Inter-state supply
+Tax split logic evaluated automatically.
+Select All
+Button
+Action
+N/A
+Toggles check state of all pending grid rows
+Selects/Deselects all items for billing.
+3. Mathematical Calculations & Business Logic Formulas
+3.1 Base Contract Value
+The total base transaction value $V_{\text{base}}$ for a given contract is computed as:
+$$V_{\text{base}} = Q \times R$$
+Where:
+$Q$ = Total Contract Quantity (in M.T. or Quintals)
+$R$ = Agreed Rate per unit currency
+3.2 Goods & Services Tax (GST) Calculations
+Tax application depends on whether the transaction is Intra-State (Seller State = Buyer State) or Inter-State (Seller State $\neq$ Buyer State):
+Intra-State Supply (CGST + SGST):
+$$\text{CGST Amount} = V_{\text{base}} \times \left( \frac{r_{\text{CGST}}}{100} \right)$$
+$$\text{SGST Amount} = V_{\text{base}} \times \left( \frac{r_{\text{SGST}}}{100} \right)$$
+$$\text{IGST Amount} = 0.00$$
+Inter-State Supply (IGST):
+$$\text{IGST Amount} = V_{\text{base}} \times \left( \frac{r_{\text{IGST}}}{100} \right)$$
+$$\text{CGST Amount} = 0.00, \quad \text{SGST Amount} = 0.00$$
+3.3 Gross Bill Amount
+The final gross billing value $A_{\text{total}}$ is calculated as:
+$$A_{\text{total}} = V_{\text{base}} + \text{IGST Amount} + \text{CGST Amount} + \text{SGST Amount}$$
+3.4 Brokerage Commission Calculation
+Brokerage liability $B_{\text{amount}}$ computed per contract/bill:
+$$B_{\text{amount}} = Q_{\text{fulfilled}} \times R_{\text{brokerage}}$$
+Where:
+$Q_{\text{fulfilled}}$ = Actual fulfilled/despatched quantity
+$R_{\text{brokerage}}$ = Brokerage commission rate per unit
+4. End-to-End Implementation Execution Flow
+┌─────────────────────────────────────────────────────────────────────────┐│ STEP 1: Entity Master Configurations                                   ││  • System Admin sets up Commodities, Tax Schedules, and Brokers.        ││  • Chart of Accounts creates Buyer & Seller accounts with GST details.  │└───────────────────────────────────┬─────────────────────────────────────┘                                    │                                    ▼┌─────────────────────────────────────────────────────────────────────────┐│ STEP 2: Contract Execution (`SCR-CNT-06`)                              ││  • Trader enters trade details (Buyer, Seller, Commodity, Qty, Rate).   ││  • System validates credit limits and updates Contract Registry.        │└───────────────────────────────────┬─────────────────────────────────────┘                                    │                                    ▼┌─────────────────────────────────────────────────────────────────────────┐│ STEP 3: Dispatch & Fulfillment (`SCR-DSP-07`)                           ││  • Goods loaded into trucks; Challan entries mapped to Contract No.     ││  • System updates remaining contractual balance quantity.              │└───────────────────────────────────┬─────────────────────────────────────┘                                    │                                    ▼┌─────────────────────────────────────────────────────────────────────────┐│ STEP 4: Invoicing & Billing (`SCR-BIL-08`)                              ││  • Billing clerk queries unbilled dispatches for party.                 ││  • Executes batch bill creation, computing GST and posting ledgers.    │└───────────────────────────────────┬─────────────────────────────────────┘                                    │                                    ▼┌─────────────────────────────────────────────────────────────────────────┐│ STEP 5: Audit & Reporting Output                                        ││  • System updates Sales Register, Party Ledgers, and Brokerage Reports. │└─────────────────────────────────────────────────────────────────────────┘
+Flow Walkthrough & Edge Case Protocols
+Contract Initialization:
+User navigates to SCR-CNT-06 and selects trade parameters.
+Validation Check: The system confirms Seller ID $\neq$ Buyer ID.
+On submit, status is set to CONTRACT_OPEN.
+Fulfillment Tracking:
+Dispatches recorded in SCR-DSP-07 link directly to the primary Contract No..
+Tolerance Rule: Dispatches are allowed up to the contract limit plus the defined Quantity Allowance percentage (e.g., $(+/-)\ 5\%$). If exceeded, the system throws an inline exception: "Dispatch quantity exceeds contractual tolerance boundary."
+Invoicing Execution:
+Navigating to SCR-BIL-08, selecting a Party fetches all fulfilled, unbilled challan records within the specified From/To Date window.
+The user clicks Select All and submits. The system creates an Invoicing Event, calculates applicable tax rates, and updates dispatch items to STATUS_BILLED.
+5. REST API Specifications
+5.1 Contract Creation Endpoint
+POST /api/v1/contracts
+Request Payload
+JSON
+{  "type": "NEW",  "date": "2026-04-01",  "sellerId": "ACC-10029",  "buyerId": "ACC-40912",  "commodityId": "COMM-003",  "qualityAllowance": "SS - 0.50%, MOISTURE - 8%, OIL - 7.50%",  "packing": "IN OLD JUTE BAGS",  "quantity": 106.07,  "unit": "MT",  "rate": 29811.00,  "currency": "INR",  "taxId": "TAX-005",  "despatchFrom": "2026-04-01",  "despatchTo": "2026-04-30",  "brokerId": "BRK-0012",  "brokerageRate": 0.00}
+Response Payload (HTTP 201 Created)
+JSON
+{  "status": "SUCCESS",  "contractNo": "00002",  "message": "Contract created successfully",  "timestamp": "2026-04-01T10:15:30Z"}
+5.2 Despatch Fetch Unbilled Endpoint
+GET /api/v1/despatches/unbilled?partyId=ACC-40912&fromDate=2026-07-01&toDate=2026-07-20
+Response Payload (HTTP 200 OK)
+JSON
+{  "partyId": "ACC-40912",  "unbilledRecords": [    {      "despatchNo": "DSP-00891",      "date": "2026-07-20",      "contractNo": "00002",      "commShort": "MUSTARD OIL CAKE",      "bags": 680,      "quantity": 34.025,      "deliveryType": "FOR"    }  ]}
+6. Non-Functional & System Requirements
+Transaction Concurrency: Database rows for contract quantity fulfillments must implement optimistic locking (@Version field) to prevent double-allocation during concurrent dispatch entries.
+Audit Trail Compliance: Every CRUD action across screens records CreatedBy, CreatedTimestamp, ModifiedBy, and ModifiedTimestamp.
+Printing & Dispatch Options: Integrated report generation engine (e.g., JasperReports / PDFkit) triggers layout renders when UI action buttons (Print, E-Mail) are executed.

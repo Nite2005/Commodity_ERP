@@ -1,0 +1,990 @@
+{
+  "all_fields": [
+    {
+      "section": "Screen 01: Commodity Master (SCR-COMM-01)",
+      "field": "Commodity Name",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "Commodity Name",
+        "Text Input",
+        "String (100)",
+        "Yes",
+        "Unique; Alphanumeric & spaces only",
+        "\"Commodity name already exists.\""
+      ]
+    },
+    {
+      "section": "Screen 01: Commodity Master (SCR-COMM-01)",
+      "field": "Quality Allowance",
+      "required": "No",
+      "color": "1f1f1f",
+      "row": [
+        "Quality Allowance",
+        "Textarea",
+        "String (1000)",
+        "No",
+        "Free text (Quality specs: ICUMSA, Moisture %, etc.)",
+        "Auto-populates into contracts."
+      ]
+    },
+    {
+      "section": "Screen 01: Commodity Master (SCR-COMM-01)",
+      "field": "Comm Short Name",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "Comm Short Name",
+        "Text Input",
+        "String (30)",
+        "Yes",
+        "Max 30 chars; Upper-case converted",
+        "\"Short name required for reports.\""
+      ]
+    },
+    {
+      "section": "Screen 02: Units Master (SCR-WGHT-02)",
+      "field": "Unit Name",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "Unit Name",
+        "Text Input",
+        "String (150)",
+        "Yes",
+        "Unique; e.g., \"FINAL AT LOADING AT EX-GODAM\"",
+        "\"Weightment rule name required.\""
+      ]
+    },
+    {
+      "section": "Screen 03: Broker Master (SCR-BRK-03)",
+      "field": "Broker Name",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "Broker Name",
+        "Text Input",
+        "String (100)",
+        "Yes",
+        "Unique; Upper-case converted",
+        "\"Broker name cannot be empty.\""
+      ]
+    },
+    {
+      "section": "Screen 04: Tax Master (SCR-TAX-04)",
+      "field": "Tax Code",
+      "required": "Yes (Auto)",
+      "color": "1f1f1f",
+      "row": [
+        "Tax Code",
+        "Text Input",
+        "String (10)",
+        "Yes (Auto)",
+        "Read-only auto-generated primary key",
+        "Primary ID"
+      ]
+    },
+    {
+      "section": "Screen 04: Tax Master (SCR-TAX-04)",
+      "field": "Tax Name",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "Tax Name",
+        "Text Input",
+        "String (50)",
+        "Yes",
+        "Unique (e.g., \"TAX FREE\", \"GST 5%\")",
+        "\"Tax name required.\""
+      ]
+    },
+    {
+      "section": "Screen 04: Tax Master (SCR-TAX-04)",
+      "field": "IGST %",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "IGST %",
+        "Numeric",
+        "Decimal (5,2)",
+        "Yes",
+        "Range: 0.00 to 100.00",
+        "\"Must be valid percentage.\""
+      ]
+    },
+    {
+      "section": "Screen 04: Tax Master (SCR-TAX-04)",
+      "field": "CGST %",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "CGST %",
+        "Numeric",
+        "Decimal (5,2)",
+        "Yes",
+        "Range: 0.00 to 100.00",
+        "\"Must be valid percentage.\""
+      ]
+    },
+    {
+      "section": "Screen 04: Tax Master (SCR-TAX-04)",
+      "field": "SGST %",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "SGST %",
+        "Numeric",
+        "Decimal (5,2)",
+        "Yes",
+        "Range: 0.00 to 100.00",
+        "\"Must be valid percentage.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-COA-05",
+      "field": "Name",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "Name",
+        "Text Input",
+        "String (150)",
+        "Yes",
+        "Unique; Length: 3 - 150 chars",
+        "\"Enter valid full legal entity name.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-COA-05",
+      "field": "Short",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "Short",
+        "Text Input",
+        "String (50)",
+        "Yes",
+        "Length: 2 - 50 chars",
+        "\"Enter short name for reports.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-COA-05",
+      "field": "Contact Person",
+      "required": "No",
+      "color": "1f1f1f",
+      "row": [
+        "Contact Person",
+        "Text Input",
+        "String (100)",
+        "No",
+        "Alphabetic & spaces",
+        "\"Enter a valid contact person name.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-COA-05",
+      "field": "Location",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "Location",
+        "Dropdown/Text",
+        "String (50)",
+        "Yes",
+        "Options: Billing, Shipping, Branch",
+        "\"Select address location type.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-COA-05",
+      "field": "Phone No(s)",
+      "required": "No",
+      "color": "1f1f1f",
+      "row": [
+        "Phone No(s)",
+        "Text Input",
+        "String (50)",
+        "No",
+        "Standard phone formatting",
+        "\"Invalid phone number.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-COA-05",
+      "field": "E-Mail",
+      "required": "No",
+      "color": "1f1f1f",
+      "row": [
+        "E-Mail",
+        "Text Input",
+        "String (100)",
+        "No",
+        "RFC 5322 Email regex pattern",
+        "\"Enter a valid email address.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-COA-05",
+      "field": "Address",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "Address",
+        "Multi-line",
+        "String (300)",
+        "Yes",
+        "Max 3 lines, total 300 chars",
+        "\"Street address is required.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-COA-05",
+      "field": "City / Pincode",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "City / Pincode",
+        "Text Input",
+        "String (50) / Num",
+        "Yes",
+        "Pincode: Exactly 6 digits (IN)",
+        "\"City & valid 6-digit Pincode required.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-COA-05",
+      "field": "State",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "State",
+        "Dropdown",
+        "String (50)",
+        "Yes",
+        "Standard Indian State list",
+        "\"Select State for GST state-code mapping.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-COA-05",
+      "field": "A/c No",
+      "required": "No",
+      "color": "1f1f1f",
+      "row": [
+        "A/c No",
+        "Text Input",
+        "String (30)",
+        "No",
+        "Numeric / Alphanumeric",
+        "\"Enter valid bank account number.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-COA-05",
+      "field": "RTGS / IFSC",
+      "required": "No",
+      "color": "1f1f1f",
+      "row": [
+        "RTGS / IFSC",
+        "Text Input",
+        "String (11)",
+        "No",
+        "Regex: ^[A-Z]{4}0[A-Z0-9]{6}$",
+        "\"Enter valid 11-character IFSC code.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-COA-05",
+      "field": "GST-TIN No",
+      "required": "Conditional",
+      "color": "1f1f1f",
+      "row": [
+        "GST-TIN No",
+        "Text Input",
+        "String (15)",
+        "Conditional",
+        "Regex: ^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$",
+        "Required if Customer Type is Registered."
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-COA-05",
+      "field": "GST Apply Date",
+      "required": "Conditional",
+      "color": "1f1f1f",
+      "row": [
+        "GST Apply Date",
+        "Date Picker",
+        "Date",
+        "Conditional",
+        "Valid date format (DD-MM-YYYY)",
+        "\"Enter valid GST registration date.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-COA-05",
+      "field": "Customer Type",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "Customer Type",
+        "Dropdown",
+        "Enum",
+        "Yes",
+        "Registered, Unregistered, Composition, SEZ",
+        "\"Select valid GST customer registration type.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-CNT-06",
+      "field": "Contract #",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "Contract #",
+        "Text Input",
+        "String (20)",
+        "Yes",
+        "System auto-generated, but editable",
+        "\"Invoice/Confirmation No is auto-assigned.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-CNT-06",
+      "field": "Type",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "Type",
+        "Dropdown",
+        "Enum",
+        "Yes",
+        "Allowed: NEW, AMENDMENT, CANCEL",
+        "\"Select valid transaction type.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-CNT-06",
+      "field": "Date",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "Date",
+        "Date Picker",
+        "Date",
+        "Yes",
+        "Default: System Date (DD-MM-YYYY)",
+        "\"Invalid trade date.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-CNT-06",
+      "field": "Seller",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "Seller",
+        "Search/Select",
+        "FK (COA)",
+        "Yes",
+        "Must be active Party; Cannot equal Buyer",
+        "\"Seller & Buyer cannot be the same party.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-CNT-06",
+      "field": "Buyer",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "Buyer",
+        "Search/Select",
+        "FK (COA)",
+        "Yes",
+        "Must be active Party; Cannot equal Seller",
+        "\"Seller & Buyer cannot be the same party.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-CNT-06",
+      "field": "Nominee",
+      "required": "No",
+      "color": "1f1f1f",
+      "row": [
+        "Nominee",
+        "Checkbox",
+        "Boolean",
+        "No",
+        "Indicates nominee trading on behalf of party",
+        "Default: false"
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-CNT-06",
+      "field": "Commodity",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "Commodity",
+        "Dropdown",
+        "FK (Comm)",
+        "Yes",
+        "Auto-populates Quality Allowance",
+        "\"Select commodity from master.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-CNT-06",
+      "field": "Quality Allowance",
+      "required": "No",
+      "color": "1f1f1f",
+      "row": [
+        "Quality Allowance",
+        "Multi-line",
+        "String (1000)",
+        "No",
+        "Defaults from Commodity Master; Editable",
+        "Auto-updated on Commodity change."
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-CNT-06",
+      "field": "Packing",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "Packing",
+        "Dropdown/Text",
+        "String (100)",
+        "Yes",
+        "e.g., \"IN OLD JUTE BAGS\"",
+        "\"Packing details required.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-CNT-06",
+      "field": "Qty Low / Unit",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "Qty Low / Unit",
+        "Numeric/Drop",
+        "Dec (10,2) / Enum",
+        "Yes",
+        "Qty > 0.00; Units: M.T., KGS, QUINTAL, BAGS",
+        "\"Quantity must be greater than zero.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-CNT-06",
+      "field": "Qty High / Unit",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "Qty High / Unit",
+        "Numeric/Drop",
+        "Dec (10,2) / Enum",
+        "Yes",
+        "Qty > 0.00; Units: M.T., KGS, QUINTAL, BAGS",
+        "\"Quantity must be greater than zero.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-CNT-06",
+      "field": "Rate / In",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "Rate / In",
+        "Numeric/Drop",
+        "Dec (12,2) / Enum",
+        "Yes",
+        "Rate > 0.00; Currency: RUPEE, DOLLAR, EURO",
+        "\"Rate must be positive numeric value.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-CNT-06",
+      "field": "Vat / Tax",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "Vat / Tax",
+        "Dropdown",
+        "FK (Tax)",
+        "Yes",
+        "Dropdown from Tax Master",
+        "\"Select tax schedule.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-CNT-06",
+      "field": "Despatch Range",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "Despatch Range",
+        "Date Range",
+        "Date (From/To)",
+        "Yes",
+        "To Date $\\ge$ From Date",
+        "\"Despatch To Date must be on or after From Date.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-CNT-06",
+      "field": "Broker Name",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "Broker Name",
+        "Dropdown",
+        "FK (Broker)",
+        "Yes",
+        "Dropdown from Broker Master",
+        "\"Assign broker to trade.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-CNT-06",
+      "field": "Broker Rate",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "Broker Rate",
+        "Numeric",
+        "Decimal (8,2)",
+        "Yes",
+        "Rate per metric unit or flat commission",
+        "Defaults from Party/Broker settings."
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-CNT-06",
+      "field": "Print Options",
+      "required": "No",
+      "color": "1f1f1f",
+      "row": [
+        "Print Options",
+        "Checkboxes",
+        "Flags",
+        "No",
+        "Options: DESPATCH/SI, TR/FINAL DOCS, PAYMENT",
+        "System print flags"
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-CNT-06",
+      "field": "Final quantity",
+      "required": "",
+      "color": "1f1f1f",
+      "row": [
+        "Final quantity",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-BIL-08",
+      "field": "Bill No",
+      "required": "Yes (Auto)",
+      "color": "1f1f1f",
+      "row": [
+        "Bill No",
+        "Text Input",
+        "String (20)",
+        "Yes (Auto)",
+        "Unique tax invoice number",
+        "Primary Key"
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-BIL-08",
+      "field": "Bill Date",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "Bill Date",
+        "Date Picker",
+        "Date",
+        "Yes",
+        "Default: Current Date (20-07-2026)",
+        "Cannot be prior to Contract Date."
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-BIL-08",
+      "field": "From / To Date",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "From / To Date",
+        "Date Range",
+        "Date Range",
+        "Yes",
+        "Date range to query pending dispatches",
+        "Filters unbilled shipments."
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-BIL-08",
+      "field": "Party Name",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "Party Name",
+        "Search Dropdown",
+        "FK (COA)",
+        "Yes",
+        "Active customer account",
+        "Filters grid items by Party."
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-BIL-08",
+      "field": "Tax",
+      "required": "Yes",
+      "color": "1f1f1f",
+      "row": [
+        "Tax",
+        "Dropdown",
+        "FK (Tax)",
+        "Yes",
+        "Auto-populates IGST, CGST, and SGST %",
+        "Updates tax rate fields on change."
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-BIL-08",
+      "field": "IGST/CGST/SGST",
+      "required": "Read-only",
+      "color": "1f1f1f",
+      "row": [
+        "IGST/CGST/SGST",
+        "Text Input",
+        "Decimal (5,2)",
+        "Read-only",
+        "Evaluated based on Intra-state vs Inter-state supply",
+        "Tax split logic evaluated automatically."
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-BIL-08",
+      "field": "Select All",
+      "required": "N/A",
+      "color": "1f1f1f",
+      "row": [
+        "Select All",
+        "Button",
+        "Action",
+        "N/A",
+        "Toggles check state of all pending grid rows",
+        "Selects/Deselects all items for billing."
+      ]
+    }
+  ],
+  "optional_no": [
+    {
+      "section": "Screen 01: Commodity Master (SCR-COMM-01)",
+      "field": "Quality Allowance",
+      "required": "No",
+      "color": "1f1f1f",
+      "row": [
+        "Quality Allowance",
+        "Textarea",
+        "String (1000)",
+        "No",
+        "Free text (Quality specs: ICUMSA, Moisture %, etc.)",
+        "Auto-populates into contracts."
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-COA-05",
+      "field": "Contact Person",
+      "required": "No",
+      "color": "1f1f1f",
+      "row": [
+        "Contact Person",
+        "Text Input",
+        "String (100)",
+        "No",
+        "Alphabetic & spaces",
+        "\"Enter a valid contact person name.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-COA-05",
+      "field": "Phone No(s)",
+      "required": "No",
+      "color": "1f1f1f",
+      "row": [
+        "Phone No(s)",
+        "Text Input",
+        "String (50)",
+        "No",
+        "Standard phone formatting",
+        "\"Invalid phone number.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-COA-05",
+      "field": "E-Mail",
+      "required": "No",
+      "color": "1f1f1f",
+      "row": [
+        "E-Mail",
+        "Text Input",
+        "String (100)",
+        "No",
+        "RFC 5322 Email regex pattern",
+        "\"Enter a valid email address.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-COA-05",
+      "field": "A/c No",
+      "required": "No",
+      "color": "1f1f1f",
+      "row": [
+        "A/c No",
+        "Text Input",
+        "String (30)",
+        "No",
+        "Numeric / Alphanumeric",
+        "\"Enter valid bank account number.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-COA-05",
+      "field": "RTGS / IFSC",
+      "required": "No",
+      "color": "1f1f1f",
+      "row": [
+        "RTGS / IFSC",
+        "Text Input",
+        "String (11)",
+        "No",
+        "Regex: ^[A-Z]{4}0[A-Z0-9]{6}$",
+        "\"Enter valid 11-character IFSC code.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-CNT-06",
+      "field": "Nominee",
+      "required": "No",
+      "color": "1f1f1f",
+      "row": [
+        "Nominee",
+        "Checkbox",
+        "Boolean",
+        "No",
+        "Indicates nominee trading on behalf of party",
+        "Default: false"
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-CNT-06",
+      "field": "Quality Allowance",
+      "required": "No",
+      "color": "1f1f1f",
+      "row": [
+        "Quality Allowance",
+        "Multi-line",
+        "String (1000)",
+        "No",
+        "Defaults from Commodity Master; Editable",
+        "Auto-updated on Commodity change."
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-CNT-06",
+      "field": "Print Options",
+      "required": "No",
+      "color": "1f1f1f",
+      "row": [
+        "Print Options",
+        "Checkboxes",
+        "Flags",
+        "No",
+        "Options: DESPATCH/SI, TR/FINAL DOCS, PAYMENT",
+        "System print flags"
+      ]
+    }
+  ],
+  "conditional": [
+    {
+      "section": "Screen ID: SCR-COA-05",
+      "field": "GST-TIN No",
+      "required": "Conditional",
+      "color": "1f1f1f",
+      "row": [
+        "GST-TIN No",
+        "Text Input",
+        "String (15)",
+        "Conditional",
+        "Regex: ^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$",
+        "Required if Customer Type is Registered."
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-COA-05",
+      "field": "GST Apply Date",
+      "required": "Conditional",
+      "color": "1f1f1f",
+      "row": [
+        "GST Apply Date",
+        "Date Picker",
+        "Date",
+        "Conditional",
+        "Valid date format (DD-MM-YYYY)",
+        "\"Enter valid GST registration date.\""
+      ]
+    }
+  ],
+  "grey_color_fields": [
+    {
+      "section": "Screen 01: Commodity Master (SCR-COMM-01)",
+      "field": "Quality Allowance",
+      "required": "No",
+      "color": "1f1f1f",
+      "row": [
+        "Quality Allowance",
+        "Textarea",
+        "String (1000)",
+        "No",
+        "Free text (Quality specs: ICUMSA, Moisture %, etc.)",
+        "Auto-populates into contracts."
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-COA-05",
+      "field": "Contact Person",
+      "required": "No",
+      "color": "1f1f1f",
+      "row": [
+        "Contact Person",
+        "Text Input",
+        "String (100)",
+        "No",
+        "Alphabetic & spaces",
+        "\"Enter a valid contact person name.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-COA-05",
+      "field": "Phone No(s)",
+      "required": "No",
+      "color": "1f1f1f",
+      "row": [
+        "Phone No(s)",
+        "Text Input",
+        "String (50)",
+        "No",
+        "Standard phone formatting",
+        "\"Invalid phone number.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-COA-05",
+      "field": "E-Mail",
+      "required": "No",
+      "color": "1f1f1f",
+      "row": [
+        "E-Mail",
+        "Text Input",
+        "String (100)",
+        "No",
+        "RFC 5322 Email regex pattern",
+        "\"Enter a valid email address.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-COA-05",
+      "field": "A/c No",
+      "required": "No",
+      "color": "1f1f1f",
+      "row": [
+        "A/c No",
+        "Text Input",
+        "String (30)",
+        "No",
+        "Numeric / Alphanumeric",
+        "\"Enter valid bank account number.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-COA-05",
+      "field": "RTGS / IFSC",
+      "required": "No",
+      "color": "1f1f1f",
+      "row": [
+        "RTGS / IFSC",
+        "Text Input",
+        "String (11)",
+        "No",
+        "Regex: ^[A-Z]{4}0[A-Z0-9]{6}$",
+        "\"Enter valid 11-character IFSC code.\""
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-CNT-06",
+      "field": "Nominee",
+      "required": "No",
+      "color": "1f1f1f",
+      "row": [
+        "Nominee",
+        "Checkbox",
+        "Boolean",
+        "No",
+        "Indicates nominee trading on behalf of party",
+        "Default: false"
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-CNT-06",
+      "field": "Quality Allowance",
+      "required": "No",
+      "color": "1f1f1f",
+      "row": [
+        "Quality Allowance",
+        "Multi-line",
+        "String (1000)",
+        "No",
+        "Defaults from Commodity Master; Editable",
+        "Auto-updated on Commodity change."
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-CNT-06",
+      "field": "Print Options",
+      "required": "No",
+      "color": "1f1f1f",
+      "row": [
+        "Print Options",
+        "Checkboxes",
+        "Flags",
+        "No",
+        "Options: DESPATCH/SI, TR/FINAL DOCS, PAYMENT",
+        "System print flags"
+      ]
+    },
+    {
+      "section": "Screen ID: SCR-CNT-06",
+      "field": "Final quantity",
+      "required": "",
+      "color": "1f1f1f",
+      "row": [
+        "Final quantity",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    }
+  ]
+}

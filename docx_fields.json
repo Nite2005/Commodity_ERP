@@ -1,0 +1,176 @@
+{
+  "grey_fields": [],
+  "optional_by_required_column": [
+    {
+      "section": "2.1 Master Management Module",
+      "field": "Quality Allowance",
+      "required": "No",
+      "row": [
+        "Quality Allowance",
+        "Textarea",
+        "String (1000)",
+        "No",
+        "Free text (Quality specs: ICUMSA, Moisture %, etc.)",
+        "Auto-populates into contracts."
+      ],
+      "fill": null,
+      "colors": [
+        "1f1f1f"
+      ]
+    },
+    {
+      "section": "2.2 Chart of Accounts / Party Master (SCR-COA-05)",
+      "field": "Contact Person",
+      "required": "No",
+      "row": [
+        "Contact Person",
+        "Text Input",
+        "String (100)",
+        "No",
+        "Alphabetic & spaces",
+        "\"Enter a valid contact person name.\""
+      ],
+      "fill": null,
+      "colors": [
+        "1f1f1f"
+      ]
+    },
+    {
+      "section": "2.2 Chart of Accounts / Party Master (SCR-COA-05)",
+      "field": "Phone No(s)",
+      "required": "No",
+      "row": [
+        "Phone No(s)",
+        "Text Input",
+        "String (50)",
+        "No",
+        "Standard phone formatting",
+        "\"Invalid phone number.\""
+      ],
+      "fill": null,
+      "colors": [
+        "1f1f1f"
+      ]
+    },
+    {
+      "section": "2.2 Chart of Accounts / Party Master (SCR-COA-05)",
+      "field": "E-Mail",
+      "required": "No",
+      "row": [
+        "E-Mail",
+        "Text Input",
+        "String (100)",
+        "No",
+        "RFC 5322 Email regex pattern",
+        "\"Enter a valid email address.\""
+      ],
+      "fill": null,
+      "colors": [
+        "1f1f1f"
+      ]
+    },
+    {
+      "section": "2.2 Chart of Accounts / Party Master (SCR-COA-05)",
+      "field": "A/c No",
+      "required": "No",
+      "row": [
+        "A/c No",
+        "Text Input",
+        "String (30)",
+        "No",
+        "Numeric / Alphanumeric",
+        "\"Enter valid bank account number.\""
+      ],
+      "fill": null,
+      "colors": [
+        "1f1f1f"
+      ]
+    },
+    {
+      "section": "2.2 Chart of Accounts / Party Master (SCR-COA-05)",
+      "field": "RTGS / IFSC",
+      "required": "No",
+      "row": [
+        "RTGS / IFSC",
+        "Text Input",
+        "String (11)",
+        "No",
+        "Regex: ^[A-Z]{4}0[A-Z0-9]{6}$",
+        "\"Enter valid 11-character IFSC code.\""
+      ],
+      "fill": null,
+      "colors": [
+        "1f1f1f"
+      ]
+    },
+    {
+      "section": "2.3 Contract Entry (SCR-CNT-06)",
+      "field": "Nominee",
+      "required": "No",
+      "row": [
+        "Nominee",
+        "Checkbox",
+        "Boolean",
+        "No",
+        "Indicates nominee trading on behalf of party",
+        "Default: false"
+      ],
+      "fill": null,
+      "colors": [
+        "1f1f1f"
+      ]
+    },
+    {
+      "section": "2.3 Contract Entry (SCR-CNT-06)",
+      "field": "Quality Allowance",
+      "required": "No",
+      "row": [
+        "Quality Allowance",
+        "Multi-line",
+        "String (1000)",
+        "No",
+        "Defaults from Commodity Master; Editable",
+        "Auto-updated on Commodity change."
+      ],
+      "fill": null,
+      "colors": [
+        "1f1f1f"
+      ]
+    },
+    {
+      "section": "2.3 Contract Entry (SCR-CNT-06)",
+      "field": "Print Options",
+      "required": "No",
+      "row": [
+        "Print Options",
+        "Checkboxes",
+        "Flags",
+        "No",
+        "Options: DESPATCH/SI, TR/FINAL DOCS, PAYMENT",
+        "System print flags"
+      ],
+      "fill": null,
+      "colors": [
+        "1f1f1f"
+      ]
+    },
+    {
+      "section": "2.3 Contract Entry (SCR-CNT-06)",
+      "field": "Final quantity",
+      "required": "",
+      "row": [
+        "Final quantity",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      "fill": null,
+      "colors": [
+        "1f1f1f"
+      ]
+    }
+  ],
+  "tables_count": 7
+}
