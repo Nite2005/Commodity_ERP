@@ -1,19 +1,84 @@
 from datetime import date
 from decimal import Decimal
-from uuid import UUID
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload
 
 from app.models import Bill, BillLineItem, Contract, Despatch, Party, Tax
-from app.models.enums import BillingStatus
+from app.models.enums import BillingStatus, ContractStatus
 from app.schemas.bill import BillCreate
+from app.services.contract_service import ContractService
 from app.services.sequence_service import SequenceService
 from app.services.tax_engine import TaxEngine
 from app.utils.ids import as_db_id, db_get
 
 
 class BillingService:
+    @classmethod
+    def list_billable_contracts(
+        cls,
+        db: Session,
+        party_id: str,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        company_id: str | None = None,
+    ) -> list[dict]:
+        party_key = as_db_id(party_id)
+        party = db_get(db, Party, party_key)
+        if not party or not party.is_active:
+            raise HTTPException(status_code=400, detail="Party not found or inactive.")
+
+        q = (
+            db.query(Contract)
+            .options(
+                joinedload(Contract.seller),
+                joinedload(Contract.buyer),
+                joinedload(Contract.commodity),
+            )
+            .filter(
+                Contract.is_active.is_(True),
+                Contract.status != ContractStatus.CANCELLED,
+                (Contract.seller_id == party_key) | (Contract.buyer_id == party_key),
+            )
+        )
+        if company_id:
+            q = q.filter(Contract.company_id == as_db_id(company_id))
+        if date_from:
+            q = q.filter(Contract.contract_date >= date_from)
+        if date_to:
+            q = q.filter(Contract.contract_date <= date_to)
+
+        rows: list[dict] = []
+        for contract in q.order_by(Contract.contract_date.desc(), Contract.contract_no.desc()):
+            billing_qty = ContractService.billing_quantity(contract)
+            billed = Decimal(str(contract.billed_qty or 0))
+            remaining = max(Decimal("0"), billing_qty - billed)
+            if remaining <= 0:
+                continue
+            rows.append(
+                {
+                    "id": contract.id,
+                    "contract_no": contract.contract_no,
+                    "contract_date": contract.contract_date,
+                    "status": contract.status,
+                    "seller_name": contract.seller.name if contract.seller else None,
+                    "buyer_name": contract.buyer.name if contract.buyer else None,
+                    "commodity_short_name": (
+                        contract.commodity.comm_short_name if contract.commodity else None
+                    ),
+                    "commodity_name": (
+                        contract.commodity.commodity_name if contract.commodity else None
+                    ),
+                    "qty_unit": contract.qty_unit,
+                    "rate": Decimal(str(contract.rate)),
+                    "billing_qty": billing_qty,
+                    "billed_qty": billed,
+                    "remaining_billable": remaining,
+                    "tax_id": contract.tax_id,
+                }
+            )
+        return rows
+
     @classmethod
     def generate(cls, db: Session, payload: BillCreate) -> Bill:
         party = db_get(db, Party, payload.party_id)
@@ -24,67 +89,101 @@ class BillingService:
         if not tax or not tax.is_active:
             raise HTTPException(status_code=400, detail="Tax not found or inactive.")
 
-        despatch_ids = [as_db_id(d) for d in payload.despatch_ids]
-        despatches = (
-            db.query(Despatch)
-            .filter(Despatch.id.in_(despatch_ids))
+        party_key = as_db_id(payload.party_id)
+        contract_ids = [as_db_id(line.contract_id) for line in payload.lines]
+        if len(set(contract_ids)) != len(contract_ids):
+            raise HTTPException(status_code=400, detail="Duplicate contracts in bill lines.")
+
+        contracts = (
+            db.query(Contract)
+            .filter(Contract.id.in_(contract_ids))
             .options(
-                joinedload(Despatch.contract).joinedload(Contract.seller),
-                joinedload(Despatch.contract).joinedload(Contract.buyer),
-                joinedload(Despatch.contract).joinedload(Contract.commodity),
+                joinedload(Contract.seller),
+                joinedload(Contract.buyer),
+                joinedload(Contract.commodity),
             )
             .with_for_update()
             .all()
         )
+        by_id = {c.id: c for c in contracts}
+        if len(by_id) != len(contract_ids):
+            raise HTTPException(status_code=404, detail="One or more contracts not found.")
 
-        if len(despatches) != len(despatch_ids):
-            raise HTTPException(status_code=404, detail="One or more despatches not found.")
+        line_data: list[dict] = []
+        base_amount = Decimal("0")
+        brokerage_amount = Decimal("0")
+        first_contract: Contract | None = None
 
-        for d in despatches:
-            if not d.is_active:
-                raise HTTPException(status_code=400, detail=f"Despatch {d.despatch_no} is inactive.")
-            if d.billing_status != BillingStatus.UNBILLED:
+        for line in payload.lines:
+            contract = by_id[as_db_id(line.contract_id)]
+            if first_contract is None:
+                first_contract = contract
+
+            if not contract.is_active:
                 raise HTTPException(
-                    status_code=409,
-                    detail=f"Despatch {d.despatch_no} is already billed.",
+                    status_code=400, detail=f"Contract {contract.contract_no} is inactive."
                 )
-            contract = d.contract
-            if str(party.id) not in (contract.seller_id, contract.buyer_id):
+            if contract.status == ContractStatus.CANCELLED:
+                raise HTTPException(
+                    status_code=400, detail=f"Contract {contract.contract_no} is cancelled."
+                )
+            if party_key not in (contract.seller_id, contract.buyer_id):
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Despatch {d.despatch_no} does not belong to the selected party.",
-                )
-            if d.despatch_date < payload.from_date or d.despatch_date > payload.to_date:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Despatch {d.despatch_no} is outside the selected date range.",
+                    detail=f"Contract {contract.contract_no} does not belong to the selected party.",
                 )
             if payload.bill_date < contract.contract_date:
                 raise HTTPException(
                     status_code=400,
-                    detail="Bill date cannot be prior to contract date.",
+                    detail=f"Bill date cannot be prior to contract {contract.contract_no} date.",
                 )
 
-        first_contract = despatches[0].contract
-        supply_type = TaxEngine.get_supply_type(
-            first_contract.seller.state,
-            first_contract.buyer.state,
-        )
+            billing_qty = ContractService.billing_quantity(contract)
+            billed = Decimal(str(contract.billed_qty or 0))
+            remaining = max(Decimal("0"), billing_qty - billed)
+            qty = Decimal(str(line.quantity))
+            if qty > remaining:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Contract {contract.contract_no}: qty {qty} exceeds "
+                        f"remaining billable {remaining}."
+                    ),
+                )
 
-        base_amount = Decimal("0")
-        brokerage_amount = Decimal("0")
-        line_data: list[dict] = []
+            despatch = None
+            despatch_id = None
+            if line.despatch_id:
+                despatch = (
+                    db.query(Despatch)
+                    .filter(Despatch.id == as_db_id(line.despatch_id))
+                    .with_for_update()
+                    .first()
+                )
+                if not despatch or not despatch.is_active:
+                    raise HTTPException(status_code=400, detail="Linked despatch not found.")
+                if despatch.contract_id != contract.id:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Despatch {despatch.despatch_no} does not belong to contract "
+                        f"{contract.contract_no}.",
+                    )
+                if despatch.billing_status != BillingStatus.UNBILLED:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"Despatch {despatch.despatch_no} is already billed.",
+                    )
+                despatch_id = despatch.id
 
-        for d in despatches:
-            contract = d.contract
-            qty = Decimal(str(d.quantity))
             rate = Decimal(str(contract.rate))
             line_base = qty * rate
             base_amount += line_base
             brokerage_amount += qty * Decimal(str(contract.broker_rate))
             line_data.append(
                 {
-                    "despatch_id": d.id,
+                    "contract": contract,
+                    "despatch": despatch,
+                    "despatch_id": despatch_id,
                     "contract_id": contract.id,
                     "quantity": qty,
                     "rate": rate,
@@ -92,13 +191,18 @@ class BillingService:
                 }
             )
 
+        assert first_contract is not None
+        supply_type = TaxEngine.get_supply_type(
+            first_contract.seller.state,
+            first_contract.buyer.state,
+        )
         tax_amounts = TaxEngine.calculate(base_amount, tax, supply_type)
         gross_amount = TaxEngine.gross(base_amount, tax_amounts)
 
         bill = Bill(
             bill_no=SequenceService.next_code(db, "BILL"),
             bill_date=payload.bill_date,
-            party_id=as_db_id(payload.party_id),
+            party_id=party_key,
             tax_id=as_db_id(payload.tax_id),
             from_date=payload.from_date,
             to_date=payload.to_date,
@@ -124,10 +228,12 @@ class BillingService:
                     line_base_amount=item["line_base_amount"],
                 )
             )
-
-        for d in despatches:
-            d.billing_status = BillingStatus.BILLED
-            d.bill_id = bill.id
+            contract = item["contract"]
+            contract.billed_qty = Decimal(str(contract.billed_qty or 0)) + item["quantity"]
+            despatch = item["despatch"]
+            if despatch is not None:
+                despatch.billing_status = BillingStatus.BILLED
+                despatch.bill_id = bill.id
 
         db.commit()
         db.refresh(bill)

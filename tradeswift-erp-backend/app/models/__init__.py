@@ -12,6 +12,7 @@ from app.models.enums import (
     CustomerType,
     PaymentTermType,
     QtyUnit,
+    RateType,
     SupplyType,
 )
 
@@ -85,6 +86,7 @@ class Party(Base, AuditMixin):
     state: Mapped[str] = mapped_column(String(50), nullable=False)
     pincode: Mapped[str] = mapped_column(String(6), nullable=False)
     account_no: Mapped[str | None] = mapped_column(String(30))
+    bank_name: Mapped[str | None] = mapped_column(String(100))
     ifsc_code: Mapped[str | None] = mapped_column(String(11))
     phone: Mapped[str | None] = mapped_column(String(50))
     mobile: Mapped[str | None] = mapped_column(String(50))
@@ -111,6 +113,7 @@ class Company(Base, AuditMixin):
     bank_name: Mapped[str | None] = mapped_column(String(100))
     ifsc_code: Mapped[str | None] = mapped_column(String(11))
     phone: Mapped[str | None] = mapped_column(String(50))
+    is_selected: Mapped[bool] = mapped_column(Boolean, default=False)
 
     parties: Mapped[list["Party"]] = relationship(back_populates="company")
     contracts: Mapped[list["Contract"]] = relationship(back_populates="company")
@@ -149,6 +152,7 @@ class RateMaster(Base, AuditMixin):
     party_id: Mapped[str] = mapped_column(String(36), ForeignKey("parties.id"), nullable=False)
     customer_type: Mapped[CustomerType] = mapped_column(Enum(CustomerType), nullable=False)
     commodity_id: Mapped[str] = mapped_column(String(36), ForeignKey("commodities.id"), nullable=False)
+    rate_type: Mapped[RateType] = mapped_column(Enum(RateType), default=RateType.FIXED, nullable=False)
     rate: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     unit: Mapped[QtyUnit] = mapped_column(Enum(QtyUnit), nullable=False)
     currency: Mapped[Currency] = mapped_column(Enum(Currency), default=Currency.INR)
@@ -197,6 +201,7 @@ class Contract(Base, AuditMixin):
     final_qty: Mapped[float | None] = mapped_column(Numeric(10, 2))
     tolerance_percent: Mapped[float] = mapped_column(Numeric(5, 2), default=5)
     fulfilled_qty: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
+    billed_qty: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
     status: Mapped[ContractStatus] = mapped_column(
         Enum(ContractStatus), nullable=False, default=ContractStatus.CONTRACT_OPEN
     )
@@ -264,7 +269,9 @@ class BillLineItem(Base, AuditMixin):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
     bill_id: Mapped[str] = mapped_column(String(36), ForeignKey("bills.id"), nullable=False)
-    despatch_id: Mapped[str] = mapped_column(String(36), ForeignKey("despatches.id"), unique=True, nullable=False)
+    despatch_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("despatches.id"), unique=True, nullable=True
+    )
     contract_id: Mapped[str] = mapped_column(String(36), ForeignKey("contracts.id"), nullable=False)
     quantity: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     rate: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)

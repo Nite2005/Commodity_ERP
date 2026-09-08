@@ -332,6 +332,14 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
     if db.query(Company).filter(Company.name == payload.name).first():
         raise HTTPException(status_code=400, detail="Company name already exists.")
     row = Company(company_code=SequenceService.next_code(db, "COMPANY"), **payload.model_dump())
+    # First active company becomes the selected working company
+    has_selected = (
+        db.query(Company)
+        .filter(Company.is_selected.is_(True), Company.is_active.is_(True))
+        .first()
+    )
+    if not has_selected:
+        row.is_selected = True
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -358,13 +366,40 @@ def update_company(item_id: str, payload: CompanyUpdate, db: Session = Depends(g
     return row
 
 
+@router.post("/companies/{item_id}/select", response_model=CompanyResponse)
+def select_company(item_id: str, db: Session = Depends(get_db)):
+    """Mark this company as the active working company for the whole ERP."""
+    row = db_get(db, Company, item_id)
+    if not row or not row.is_active:
+        raise HTTPException(status_code=404, detail="Company not found or inactive")
+    db.query(Company).filter(Company.is_selected.is_(True)).update(
+        {Company.is_selected: False}, synchronize_session=False
+    )
+    row.is_selected = True
+    db.commit()
+    db.refresh(row)
+    return row
+
+
 @router.delete("/companies/{item_id}", status_code=204)
 def delete_company(item_id: str, db: Session = Depends(get_db)):
     row = db_get(db, Company, item_id)
     if not row:
         raise HTTPException(status_code=404, detail="Company not found")
+    was_selected = row.is_selected
     row.is_active = False
+    row.is_selected = False
     db.commit()
+    if was_selected:
+        next_row = (
+            db.query(Company)
+            .filter(Company.is_active.is_(True))
+            .order_by(Company.name)
+            .first()
+        )
+        if next_row:
+            next_row.is_selected = True
+            db.commit()
 
 
 @router.get("/contacts", response_model=list[ContactResponse])

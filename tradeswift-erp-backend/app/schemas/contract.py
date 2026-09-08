@@ -32,7 +32,7 @@ class ContractCreate(BaseModel):
     qty_high: Decimal = Field(gt=0)
     qty_unit: QtyUnit
     rate: Decimal = Field(gt=0)
-    currency: Currency
+    currency: Currency = Currency.INR
     tax_id: UUID
     payment_term_id: UUID | None = None
     weightment_unit_id: UUID | None = None
@@ -145,7 +145,9 @@ class ContractBalanceResponse(BaseModel):
     qty_high: Decimal
     final_qty: Decimal | None
     fulfilled_qty: Decimal
+    billed_qty: Decimal = Decimal("0")
     remaining_qty: Decimal
+    remaining_billable: Decimal = Decimal("0")
     max_allowed_qty: Decimal
     tolerance_percent: Decimal
     status: ContractStatus

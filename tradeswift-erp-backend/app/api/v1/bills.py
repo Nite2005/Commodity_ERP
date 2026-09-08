@@ -5,7 +5,13 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.models import Bill, BillLineItem, Contract
-from app.schemas.bill import BillCreate, BillCreateResponse, BillDetailResponse, BillResponse
+from app.schemas.bill import (
+    BillableContractResponse,
+    BillCreate,
+    BillCreateResponse,
+    BillDetailResponse,
+    BillResponse,
+)
 from app.services.billing_service import BillingService
 from app.utils.ids import as_db_id
 
@@ -55,6 +61,23 @@ def list_bills(
     if date_to:
         q = q.filter(Bill.bill_date <= date_to)
     return q.order_by(Bill.bill_date.desc(), Bill.bill_no.desc()).all()
+
+
+@router.get("/billable-contracts", response_model=list[BillableContractResponse])
+def list_billable_contracts(
+    party_id: str = Query(...),
+    date_from: date | None = None,
+    date_to: date | None = None,
+    company_id: str | None = None,
+    db: Session = Depends(get_db),
+):
+    return BillingService.list_billable_contracts(
+        db,
+        party_id=party_id,
+        date_from=date_from,
+        date_to=date_to,
+        company_id=company_id,
+    )
 
 
 @router.get("/{bill_id}", response_model=BillDetailResponse)

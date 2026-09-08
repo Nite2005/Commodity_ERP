@@ -36,6 +36,7 @@ def init_db() -> None:
     _migrate_parties_table()
     _migrate_companies_table()
     _migrate_contracts_table()
+    _migrate_rate_masters_table()
 
 
 def _party_columns(conn) -> set[str]:
@@ -80,6 +81,10 @@ def _migrate_parties_table() -> None:
                     )
                 except Exception:
                     pass
+
+        if "bank_name" not in cols:
+            conn.execute(text("ALTER TABLE parties ADD COLUMN bank_name VARCHAR(100)"))
+            cols.add("bank_name")
 
         _migrate_party_unique_constraints(conn)
 
@@ -189,6 +194,11 @@ def _migrate_companies_table() -> None:
             "account_no": "VARCHAR(30)",
             "bank_name": "VARCHAR(100)",
             "ifsc_code": "VARCHAR(11)",
+            "is_selected": (
+                "BOOLEAN DEFAULT 0"
+                if settings.database_url.startswith("sqlite")
+                else "TINYINT(1) NOT NULL DEFAULT 0"
+            ),
         }
         for col_name, col_type in bank_cols.items():
             if col_name not in cols:
@@ -265,3 +275,112 @@ def _migrate_contracts_table() -> None:
                     )
                 except Exception:
                     pass
+
+        if "billed_qty" not in cols:
+            if settings.database_url.startswith("sqlite"):
+                conn.execute(text("ALTER TABLE contracts ADD COLUMN billed_qty NUMERIC(10,2) DEFAULT 0"))
+            else:
+                conn.execute(
+                    text(
+                        "ALTER TABLE contracts ADD COLUMN billed_qty DECIMAL(10,2) NOT NULL DEFAULT 0"
+                    )
+                )
+            cols.add("billed_qty")
+            try:
+                conn.execute(
+                    text(
+                        "UPDATE contracts c SET billed_qty = COALESCE(("
+                        "  SELECT SUM(bli.quantity) FROM bill_line_items bli "
+                        "  WHERE bli.contract_id = c.id AND bli.is_active = 1"
+                        "), 0)"
+                    )
+                )
+            except Exception:
+                pass
+
+    _migrate_bill_line_items_table()
+
+
+def _migrate_bill_line_items_table() -> None:
+    """Allow contract-only bill lines (despatch optional)."""
+    from sqlalchemy import text
+
+    with engine.begin() as conn:
+        try:
+            if settings.database_url.startswith("sqlite"):
+                cols = {
+                    row[1]
+                    for row in conn.execute(text("PRAGMA table_info(bill_line_items)")).fetchall()
+                }
+            else:
+                cols = {
+                    row[0]
+                    for row in conn.execute(
+                        text(
+                            "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS "
+                            "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'bill_line_items'"
+                        )
+                    ).fetchall()
+                }
+        except Exception:
+            return
+        if not cols or "despatch_id" not in cols:
+            return
+
+        if settings.database_url.startswith("sqlite"):
+            # SQLite cannot easily alter nullability; new DBs use model definition.
+            return
+
+        try:
+            conn.execute(
+                text("ALTER TABLE bill_line_items MODIFY despatch_id VARCHAR(36) NULL")
+            )
+        except Exception:
+            pass
+
+
+def _migrate_rate_masters_table() -> None:
+    """Add rate_type (FIXED / PERCENTAGE) for commodity billing rates."""
+    from sqlalchemy import text
+
+    with engine.begin() as conn:
+        try:
+            if settings.database_url.startswith("sqlite"):
+                cols = {
+                    row[1]
+                    for row in conn.execute(text("PRAGMA table_info(rate_masters)")).fetchall()
+                }
+            else:
+                cols = {
+                    row[0]
+                    for row in conn.execute(
+                        text(
+                            "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS "
+                            "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'rate_masters'"
+                        )
+                    ).fetchall()
+                }
+        except Exception:
+            return
+        if not cols or "rate_type" in cols:
+            return
+
+        if settings.database_url.startswith("sqlite"):
+            conn.execute(
+                text("ALTER TABLE rate_masters ADD COLUMN rate_type VARCHAR(20) DEFAULT 'FIXED'")
+            )
+        else:
+            try:
+                conn.execute(
+                    text(
+                        "ALTER TABLE rate_masters ADD COLUMN rate_type "
+                        "ENUM('FIXED','PERCENTAGE') NOT NULL DEFAULT 'FIXED'"
+                    )
+                )
+            except Exception:
+                conn.execute(
+                    text(
+                        "ALTER TABLE rate_masters ADD COLUMN rate_type "
+                        "VARCHAR(20) NOT NULL DEFAULT 'FIXED'"
+                    )
+                )

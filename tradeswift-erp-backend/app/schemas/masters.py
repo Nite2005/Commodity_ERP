@@ -2,9 +2,9 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.models.enums import Currency, CustomerType, PaymentTermType, QtyUnit
+from app.models.enums import Currency, CustomerType, PaymentTermType, QtyUnit, RateType
 from app.utils.validators import validate_gst_tin, validate_ifsc, validate_pincode
 
 
@@ -109,6 +109,7 @@ class PartyCreate(BaseModel):
     state: str = Field(max_length=50)
     pincode: str = Field(max_length=6)
     account_no: str | None = Field(default=None, max_length=30)
+    bank_name: str | None = Field(default=None, max_length=100)
     ifsc_code: str | None = Field(default=None, max_length=11)
     phone: str | None = Field(default=None, max_length=50)
     mobile: str | None = Field(default=None, max_length=50)
@@ -147,6 +148,7 @@ class PartyUpdate(BaseModel):
     state: str | None = None
     pincode: str | None = None
     account_no: str | None = None
+    bank_name: str | None = None
     ifsc_code: str | None = None
     phone: str | None = None
     mobile: str | None = None
@@ -170,6 +172,7 @@ class PartyResponse(ORMModel):
     state: str
     pincode: str
     account_no: str | None
+    bank_name: str | None
     ifsc_code: str | None
     phone: str | None
     mobile: str | None
@@ -230,6 +233,7 @@ class CompanyResponse(ORMModel):
     bank_name: str | None
     ifsc_code: str | None
     phone: str | None
+    is_selected: bool
     is_active: bool
     created_at: datetime
 
@@ -298,21 +302,39 @@ class RateMasterCreate(BaseModel):
     party_id: UUID
     customer_type: CustomerType
     commodity_id: UUID
+    rate_type: RateType = RateType.FIXED
     rate: Decimal = Field(gt=0)
     unit: QtyUnit
     currency: Currency = Currency.INR
     brokerage: Decimal = Field(ge=0, default=0)
+
+    @model_validator(mode="after")
+    def validate_rate_by_type(self):
+        if self.rate_type == RateType.PERCENTAGE and self.rate > Decimal("100"):
+            raise ValueError("Percentage rate cannot exceed 100.")
+        return self
 
 
 class RateMasterUpdate(BaseModel):
     party_id: UUID | None = None
     customer_type: CustomerType | None = None
     commodity_id: UUID | None = None
+    rate_type: RateType | None = None
     rate: Decimal | None = Field(default=None, gt=0)
     unit: QtyUnit | None = None
     currency: Currency | None = None
     brokerage: Decimal | None = Field(default=None, ge=0)
     is_active: bool | None = None
+
+    @model_validator(mode="after")
+    def validate_rate_by_type(self):
+        if (
+            self.rate_type == RateType.PERCENTAGE
+            and self.rate is not None
+            and self.rate > Decimal("100")
+        ):
+            raise ValueError("Percentage rate cannot exceed 100.")
+        return self
 
 
 class RateMasterResponse(ORMModel):
@@ -321,6 +343,7 @@ class RateMasterResponse(ORMModel):
     party_id: UUID
     customer_type: CustomerType
     commodity_id: UUID
+    rate_type: RateType
     rate: Decimal
     unit: QtyUnit
     currency: Currency

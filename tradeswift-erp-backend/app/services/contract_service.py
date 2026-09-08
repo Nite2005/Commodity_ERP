@@ -124,8 +124,8 @@ class ContractService:
         row = db_get(db, Contract, contract_id)
         if not row:
             raise HTTPException(status_code=404, detail="Contract not found")
-        if row.status != ContractStatus.CONTRACT_OPEN:
-            raise HTTPException(status_code=400, detail="Only open contracts can be updated.")
+        if row.status == ContractStatus.CANCELLED:
+            raise HTTPException(status_code=400, detail="Cancelled contracts cannot be updated.")
 
         data = payload.model_dump(exclude_unset=True)
         print_options = data.pop("print_options", None)
@@ -185,7 +185,8 @@ class ContractService:
                     cls._require_active_fk(db, model, data[field], label)
                 data[field] = as_db_id(data[field])
 
-        if "contract_type" in data:
+        # Changing type only resets status while the contract is still open.
+        if "contract_type" in data and row.status == ContractStatus.CONTRACT_OPEN:
             row.status = cls._initial_status(data["contract_type"])
 
         for key, value in data.items():
@@ -221,9 +222,11 @@ class ContractService:
     def balance(cls, contract: Contract) -> dict:
         billing_qty = cls.billing_quantity(contract)
         fulfilled = Decimal(str(contract.fulfilled_qty))
+        billed = Decimal(str(contract.billed_qty or 0))
         tolerance = Decimal(str(contract.tolerance_percent))
         max_allowed = billing_qty + (billing_qty * tolerance / Decimal("100"))
         remaining = max(Decimal("0"), billing_qty - fulfilled)
+        remaining_billable = max(Decimal("0"), billing_qty - billed)
         return {
             "contract_no": contract.contract_no,
             "billing_qty": billing_qty,
@@ -231,7 +234,9 @@ class ContractService:
             "qty_high": Decimal(str(contract.qty_high)),
             "final_qty": Decimal(str(contract.final_qty)) if contract.final_qty is not None else None,
             "fulfilled_qty": fulfilled,
+            "billed_qty": billed,
             "remaining_qty": remaining,
+            "remaining_billable": remaining_billable,
             "max_allowed_qty": max_allowed,
             "tolerance_percent": tolerance,
             "status": contract.status,

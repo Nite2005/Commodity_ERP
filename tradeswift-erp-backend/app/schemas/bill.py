@@ -4,11 +4,17 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.models.enums import SupplyType
+from app.models.enums import ContractStatus, QtyUnit, SupplyType
 
 
 class ORMModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+
+
+class BillLineCreate(BaseModel):
+    contract_id: UUID
+    quantity: Decimal = Field(gt=0)
+    despatch_id: UUID | None = None
 
 
 class BillCreate(BaseModel):
@@ -17,7 +23,7 @@ class BillCreate(BaseModel):
     tax_id: UUID
     from_date: date
     to_date: date
-    despatch_ids: list[UUID] = Field(min_length=1)
+    lines: list[BillLineCreate] = Field(min_length=1)
 
     @model_validator(mode="after")
     def validate_dates(self):
@@ -26,9 +32,26 @@ class BillCreate(BaseModel):
         return self
 
 
+class BillableContractResponse(BaseModel):
+    id: UUID
+    contract_no: str
+    contract_date: date
+    status: ContractStatus
+    seller_name: str | None = None
+    buyer_name: str | None = None
+    commodity_short_name: str | None = None
+    commodity_name: str | None = None
+    qty_unit: QtyUnit
+    rate: Decimal
+    billing_qty: Decimal
+    billed_qty: Decimal
+    remaining_billable: Decimal
+    tax_id: UUID
+
+
 class BillLineItemResponse(ORMModel):
     id: UUID
-    despatch_id: UUID
+    despatch_id: UUID | None = None
     contract_id: UUID
     quantity: Decimal
     rate: Decimal

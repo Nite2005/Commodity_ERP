@@ -49,3 +49,8 @@ class BillingStatus(str, enum.Enum):
 class SupplyType(str, enum.Enum):
     INTRA_STATE = "INTRA_STATE"
     INTER_STATE = "INTER_STATE"
+
+
+class RateType(str, enum.Enum):
+    FIXED = "FIXED"
+    PERCENTAGE = "PERCENTAGE"
