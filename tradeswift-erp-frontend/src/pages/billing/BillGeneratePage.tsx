@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Search } from 'lucide-react'
-import { billsApi, despatchesApi, mastersApi, ApiClientError } from '../../api/client'
-import type { Party, Tax, UnbilledDespatch } from '../../types'
+import { billsApi, mastersApi, ApiClientError } from '../../api/client'
+import type { BillableContract, Party, Tax } from '../../types'
+import { useSelectedCompany } from '../../context/SelectedCompanyContext'
 import { Card, CardBody, CardHeader } from '../../components/Card'
 import { Button } from '../../components/Button'
 import { FormField, inputClass, Alert } from '../../components/Modal'
@@ -18,10 +19,12 @@ function monthStart() {
 
 export function BillGeneratePage() {
   const navigate = useNavigate()
+  const { company } = useSelectedCompany()
   const [parties, setParties] = useState<Party[]>([])
   const [taxes, setTaxes] = useState<Tax[]>([])
-  const [rows, setRows] = useState<UnbilledDespatch[]>([])
+  const [rows, setRows] = useState<BillableContract[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [qtyById, setQtyById] = useState<Record<string, string>>({})
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -35,13 +38,16 @@ export function BillGeneratePage() {
   })
 
   useEffect(() => {
-    Promise.all([mastersApi.parties.list(), mastersApi.taxes.list()]).then(([p, t]) => {
+    Promise.all([
+      mastersApi.parties.list({ companyId: company?.id }),
+      mastersApi.taxes.list(),
+    ]).then(([p, t]) => {
       setParties(p.filter((x) => x.is_active))
       setTaxes(t.filter((x) => x.is_active))
     })
-  }, [])
+  }, [company])
 
-  const fetchUnbilled = async () => {
+  const fetchBillable = async () => {
     if (!form.party_id) {
       setError('Select a party first.')
       return
@@ -50,10 +56,20 @@ export function BillGeneratePage() {
     setError('')
     setSelected(new Set())
     try {
-      const res = await despatchesApi.unbilled(form.party_id, form.from_date, form.to_date)
-      setRows(res.unbilled_records)
-      if (res.unbilled_records.length === 0) {
-        setError('No unbilled despatches found for this party and date range.')
+      const list = await billsApi.billableContracts({
+        partyId: form.party_id,
+        fromDate: form.from_date,
+        toDate: form.to_date,
+        companyId: company?.id,
+      })
+      setRows(list)
+      setQtyById(
+        Object.fromEntries(list.map((r) => [r.id, String(r.remaining_billable)])),
+      )
+      if (list.length === 0) {
+        setError('No billable contracts found for this party and date range.')
+      } else if (!form.tax_id && list[0]?.tax_id) {
+        setForm((f) => ({ ...f, tax_id: list[0].tax_id }))
       }
     } catch (e) {
       setError(e instanceof ApiClientError ? e.message : 'Fetch failed')
@@ -77,8 +93,12 @@ export function BillGeneratePage() {
 
   const selectedRows = rows.filter((r) => selected.has(r.id))
   const baseTotal = useMemo(
-    () => selectedRows.reduce((s, r) => s + Number(r.line_base_amount), 0),
-    [selectedRows],
+    () =>
+      selectedRows.reduce((s, r) => {
+        const qty = Number(qtyById[r.id] || 0)
+        return s + qty * Number(r.rate)
+      }, 0),
+    [selectedRows, qtyById],
   )
 
   const generate = async () => {
@@ -87,9 +107,26 @@ export function BillGeneratePage() {
       return
     }
     if (selected.size === 0) {
-      setError('Select at least one despatch.')
+      setError('Select at least one contract.')
       return
     }
+
+    const lines: { contract_id: string; quantity: number }[] = []
+    for (const r of selectedRows) {
+      const qty = Number(qtyById[r.id])
+      if (!qty || qty <= 0) {
+        setError(`Enter a valid bill qty for contract #${r.contract_no}.`)
+        return
+      }
+      if (qty > Number(r.remaining_billable)) {
+        setError(
+          `Contract #${r.contract_no}: qty exceeds remaining billable ${r.remaining_billable}.`,
+        )
+        return
+      }
+      lines.push({ contract_id: r.id, quantity: qty })
+    }
+
     setSaving(true)
     setError('')
     try {
@@ -99,7 +136,7 @@ export function BillGeneratePage() {
         tax_id: form.tax_id,
         from_date: form.from_date,
         to_date: form.to_date,
-        despatch_ids: [...selected],
+        lines,
       })
       navigate(`/billing/${res.id}`)
     } catch (e) {
@@ -121,7 +158,7 @@ export function BillGeneratePage() {
       <Card>
         <CardHeader
           title="Generate Bill"
-          subtitle="Select unbilled despatches and create tax invoice"
+          subtitle="Select billable contracts (qty from final qty / remaining) — despatch optional"
         />
         <CardBody>
           {error && (
@@ -168,7 +205,7 @@ export function BillGeneratePage() {
                 onChange={(e) => setForm({ ...form, bill_date: e.target.value })}
               />
             </FormField>
-            <FormField label="From Date" required>
+            <FormField label="Contract From" required>
               <input
                 type="date"
                 className={inputClass}
@@ -176,7 +213,7 @@ export function BillGeneratePage() {
                 onChange={(e) => setForm({ ...form, from_date: e.target.value })}
               />
             </FormField>
-            <FormField label="To Date" required>
+            <FormField label="Contract To" required>
               <input
                 type="date"
                 className={inputClass}
@@ -185,8 +222,8 @@ export function BillGeneratePage() {
               />
             </FormField>
             <div className="flex items-end">
-              <Button onClick={fetchUnbilled} disabled={loading} className="w-full">
-                <Search size={16} /> {loading ? 'Loading…' : 'Fetch Unbilled'}
+              <Button onClick={fetchBillable} disabled={loading} className="w-full">
+                <Search size={16} /> {loading ? 'Loading…' : 'Fetch Contracts'}
               </Button>
             </div>
           </div>
@@ -201,7 +238,7 @@ export function BillGeneratePage() {
                     onChange={toggleAll}
                     className="rounded border-slate-300"
                   />
-                  Select All ({rows.length} despatches)
+                  Select All ({rows.length} contracts)
                 </label>
                 {selected.size > 0 && (
                   <span className="text-sm text-slate-600">
@@ -215,37 +252,60 @@ export function BillGeneratePage() {
                   <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
                     <tr>
                       <th className="px-4 py-3" />
-                      <th className="px-4 py-3">Despatch</th>
-                      <th className="px-4 py-3">Date</th>
                       <th className="px-4 py-3">Contract</th>
+                      <th className="px-4 py-3">Date</th>
+                      <th className="px-4 py-3">Status</th>
                       <th className="px-4 py-3">Commodity</th>
-                      <th className="px-4 py-3">Qty</th>
+                      <th className="px-4 py-3">Billing Qty</th>
+                      <th className="px-4 py-3">Already Billed</th>
+                      <th className="px-4 py-3">Bill Qty</th>
                       <th className="px-4 py-3">Rate</th>
                       <th className="px-4 py-3">Base</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {rows.map((r) => (
-                      <tr key={r.id} className="hover:bg-slate-50">
-                        <td className="px-4 py-3">
-                          <input
-                            type="checkbox"
-                            checked={selected.has(r.id)}
-                            onChange={() => toggle(r.id)}
-                            className="rounded border-slate-300"
-                          />
-                        </td>
-                        <td className="px-4 py-3 font-medium">{r.despatch_no}</td>
-                        <td className="px-4 py-3">{r.despatch_date}</td>
-                        <td className="px-4 py-3">#{r.contract_no}</td>
-                        <td className="px-4 py-3">{r.commodity_short_name ?? '—'}</td>
-                        <td className="px-4 py-3">
-                          {r.quantity} {r.qty_unit ?? ''}
-                        </td>
-                        <td className="px-4 py-3">{r.rate}</td>
-                        <td className="px-4 py-3">{Number(r.line_base_amount).toLocaleString('en-IN')}</td>
-                      </tr>
-                    ))}
+                    {rows.map((r) => {
+                      const qty = Number(qtyById[r.id] || 0)
+                      const base = qty * Number(r.rate)
+                      return (
+                        <tr key={r.id} className="hover:bg-slate-50">
+                          <td className="px-4 py-3">
+                            <input
+                              type="checkbox"
+                              checked={selected.has(r.id)}
+                              onChange={() => toggle(r.id)}
+                              className="rounded border-slate-300"
+                            />
+                          </td>
+                          <td className="px-4 py-3 font-medium">#{r.contract_no}</td>
+                          <td className="px-4 py-3">{r.contract_date}</td>
+                          <td className="px-4 py-3">{r.status}</td>
+                          <td className="px-4 py-3">{r.commodity_short_name ?? '—'}</td>
+                          <td className="px-4 py-3">
+                            {r.billing_qty} {r.qty_unit}
+                          </td>
+                          <td className="px-4 py-3">{r.billed_qty}</td>
+                          <td className="px-4 py-3">
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0.01"
+                              max={r.remaining_billable}
+                              className="w-28 rounded border border-slate-200 px-2 py-1"
+                              value={qtyById[r.id] ?? ''}
+                              disabled={!selected.has(r.id)}
+                              onChange={(e) =>
+                                setQtyById((prev) => ({ ...prev, [r.id]: e.target.value }))
+                              }
+                            />
+                          </td>
+                          <td className="px-4 py-3">{r.rate}</td>
+                          <td className="px-4 py-3">
+                            {selected.has(r.id) ? base.toLocaleString('en-IN') : '—'}
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>

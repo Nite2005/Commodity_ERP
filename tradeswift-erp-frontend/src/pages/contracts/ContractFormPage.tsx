@@ -1,150 +1,191 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { mastersApi, contractsApi, ApiClientError } from '../../api/client'
-import type {
-  Broker,
-  Commodity,
-  Company,
-  Currency,
-  Party,
-  PaymentTerm,
-  QtyUnit,
-  Tax,
-  Unit,
-} from '../../types'
+import type { Broker, Commodity, Party, PaymentTerm, QtyUnit, Tax } from '../../types'
+import { useSelectedCompany } from '../../context/SelectedCompanyContext'
 import { Card, CardBody, CardHeader } from '../../components/Card'
 import { Button } from '../../components/Button'
 import { FormField, inputClass, Alert } from '../../components/Modal'
+import { DateInputDmy } from '../../components/DateInputDmy'
 
 function today() {
   return new Date().toISOString().slice(0, 10)
 }
 
+const emptyForm = () => ({
+  contract_no: '',
+  contract_date: today(),
+  company_id: '',
+  seller_id: '',
+  buyer_id: '',
+  commodity_id: '',
+  qty_low: '',
+  qty_high: '',
+  qty_unit: 'MT' as QtyUnit,
+  rate: '',
+  payment_term_id: '',
+  despatch_from: today(),
+  despatch_to: today(),
+  broker_id: '',
+  tax_id: '',
+})
+
 export function ContractFormPage() {
+  const { id } = useParams<{ id: string }>()
+  const isEdit = Boolean(id)
   const navigate = useNavigate()
-  const [companies, setCompanies] = useState<Company[]>([])
+  const { company } = useSelectedCompany()
   const [parties, setParties] = useState<Party[]>([])
   const [commodities, setCommodities] = useState<Commodity[]>([])
   const [taxes, setTaxes] = useState<Tax[]>([])
   const [brokers, setBrokers] = useState<Broker[]>([])
   const [paymentTerms, setPaymentTerms] = useState<PaymentTerm[]>([])
-  const [units, setUnits] = useState<Unit[]>([])
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
-
-  const [form, setForm] = useState({
-    contract_no: '',
-    contract_date: today(),
-    company_id: '',
-    seller_id: '',
-    buyer_id: '',
-    commodity_id: '',
-    quality_allowance: '',
-    qty_low: '',
-    qty_high: '',
-    qty_unit: 'MT' as QtyUnit,
-    rate: '',
-    currency: 'INR' as Currency,
-    payment_term_id: '',
-    weightment_unit_id: '',
-    despatch_from: today(),
-    despatch_to: today(),
-    broker_id: '',
-  })
+  const [loading, setLoading] = useState(isEdit)
+  const [form, setForm] = useState(emptyForm)
+  const [companyName, setCompanyName] = useState('')
 
   useEffect(() => {
     Promise.all([
-      mastersApi.companies.list(),
       mastersApi.commodities.list(),
       mastersApi.taxes.list(),
       mastersApi.brokers.list(),
       mastersApi.paymentTerms.list(),
-      mastersApi.units.list(),
-    ]).then(([co, c, t, b, pt, u]) => {
-      setCompanies(co.filter((x) => x.is_active))
+    ]).then(([c, t, b, pt]) => {
       setCommodities(c.filter((x) => x.is_active))
       setTaxes(t.filter((x) => x.is_active))
       setBrokers(b.filter((x) => x.is_active))
       setPaymentTerms(pt.filter((x) => x.is_active))
-      setUnits(u.filter((x) => x.is_active))
     })
   }, [])
 
   useEffect(() => {
-    if (!form.company_id) {
+    if (isEdit) return
+    if (!company) {
+      setForm((f) => ({ ...f, company_id: '', seller_id: '', buyer_id: '' }))
       setParties([])
       return
     }
-    mastersApi.parties.list({ companyId: form.company_id }).then((p) => {
-      setParties(p.filter((x) => x.is_active))
-    })
-  }, [form.company_id])
-
-  const onCompanyChange = (companyId: string) => {
     setForm((f) => ({
       ...f,
-      company_id: companyId,
+      company_id: company.id,
       seller_id: '',
       buyer_id: '',
     }))
-  }
+    mastersApi.parties.list({ companyId: company.id }).then((p) => {
+      setParties(p.filter((x) => x.is_active))
+    })
+  }, [company, isEdit])
 
-  const onCommodityChange = (id: string) => {
-    const comm = commodities.find((c) => c.id === id)
-    setForm((f) => ({
-      ...f,
-      commodity_id: id,
-      quality_allowance: comm?.quality_allowance ?? f.quality_allowance,
-    }))
+  useEffect(() => {
+    if (!id) return
+    let cancelled = false
+    ;(async () => {
+      setLoading(true)
+      setError('')
+      try {
+        const c = await contractsApi.get(id)
+        if (cancelled) return
+        if (c.status === 'CANCELLED') {
+          setError('Cancelled contracts cannot be edited.')
+          return
+        }
+        const companyId = c.company_id ?? ''
+        const partyList = companyId
+          ? await mastersApi.parties.list({ companyId })
+          : await mastersApi.parties.list()
+        if (cancelled) return
+        setParties(partyList.filter((x) => x.is_active))
+        setCompanyName(c.company_name ?? '')
+        setForm({
+          contract_no: c.contract_no ?? '',
+          contract_date: c.contract_date,
+          company_id: companyId,
+          seller_id: c.seller_id,
+          buyer_id: c.buyer_id,
+          commodity_id: c.commodity_id,
+          qty_low: String(c.qty_low),
+          qty_high: String(c.qty_high),
+          qty_unit: c.qty_unit,
+          rate: String(c.rate),
+          payment_term_id: c.payment_term_id ?? '',
+          despatch_from: c.despatch_from,
+          despatch_to: c.despatch_to,
+          broker_id: c.broker_id,
+          tax_id: c.tax_id,
+        })
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof ApiClientError ? e.message : 'Failed to load contract')
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [id])
+
+  const buildPayload = () => {
+    const taxId = form.tax_id || taxes[0]?.id
+    if (!taxId) {
+      throw new Error('Add at least one active tax in Tax Master before saving a contract.')
+    }
+    if (!form.company_id) {
+      throw new Error('Select a company in Company Master before saving a contract.')
+    }
+    return {
+      contract_no: form.contract_no || null,
+      contract_type: 'NEW' as const,
+      contract_date: form.contract_date,
+      company_id: form.company_id,
+      seller_id: form.seller_id,
+      buyer_id: form.buyer_id,
+      is_nominee: false,
+      commodity_id: form.commodity_id,
+      quality_allowance: null,
+      packing: 'NA',
+      qty_low: Number(form.qty_low),
+      qty_high: Number(form.qty_high),
+      qty_unit: form.qty_unit,
+      rate: Number(form.rate),
+      currency: 'INR' as const,
+      tax_id: taxId,
+      payment_term_id: form.payment_term_id || null,
+      weightment_unit_id: null,
+      despatch_from: form.despatch_from,
+      despatch_to: form.despatch_to,
+      broker_id: form.broker_id,
+      broker_rate: 0,
+    }
   }
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
     setError('')
-
-    const defaultTax = taxes[0]
-    if (!defaultTax) {
-      setError('Add at least one active tax in Tax Master before creating a contract.')
-      setSaving(false)
-      return
-    }
-
-    if (!form.company_id) {
-      setError('Select a company before creating a contract.')
-      setSaving(false)
-      return
-    }
-
     try {
-      const res = await contractsApi.create({
-        contract_no: form.contract_no || null,
-        contract_type: 'NEW',
-        contract_date: form.contract_date,
-        company_id: form.company_id,
-        seller_id: form.seller_id,
-        buyer_id: form.buyer_id,
-        is_nominee: false,
-        commodity_id: form.commodity_id,
-        quality_allowance: form.quality_allowance || null,
-        packing: 'NA',
-        qty_low: Number(form.qty_low),
-        qty_high: Number(form.qty_high),
-        qty_unit: form.qty_unit,
-        rate: Number(form.rate),
-        currency: form.currency,
-        tax_id: defaultTax.id,
-        payment_term_id: form.payment_term_id || null,
-        weightment_unit_id: form.weightment_unit_id || null,
-        despatch_from: form.despatch_from,
-        despatch_to: form.despatch_to,
-        broker_id: form.broker_id,
-        broker_rate: 0,
-      })
-      navigate(`/contracts/${res.id}`)
+      const payload = buildPayload()
+      if (isEdit && id) {
+        await contractsApi.update(id, payload)
+        navigate(`/contracts/${id}`)
+      } else {
+        const res = await contractsApi.create(payload)
+        navigate(`/contracts/${res.id}`)
+      }
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : 'Failed to create contract')
+      setError(
+        err instanceof ApiClientError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : isEdit
+              ? 'Failed to update contract'
+              : 'Failed to create contract',
+      )
     } finally {
       setSaving(false)
     }
@@ -152,17 +193,24 @@ export function ContractFormPage() {
 
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }))
 
+  if (loading) {
+    return <div className="py-12 text-center text-sm text-slate-500">Loading contract…</div>
+  }
+
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <Link
-        to="/contracts"
+        to={isEdit && id ? `/contracts/${id}` : '/contracts'}
         className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-slate-800"
       >
-        <ArrowLeft size={16} /> Back to contracts
+        <ArrowLeft size={16} /> {isEdit ? 'Back to contract' : 'Back to contracts'}
       </Link>
 
       <Card>
-        <CardHeader title="New Contract" subtitle="SCR-CNT-06 — Trade contract entry" />
+        <CardHeader
+          title={isEdit ? 'Edit Contract' : 'New Contract'}
+          subtitle={isEdit ? `Contract #${form.contract_no || id}` : 'Trade contract entry'}
+        />
         <CardBody>
           {error && (
             <div className="mb-6">
@@ -175,11 +223,20 @@ export function ContractFormPage() {
                 Contract Info
               </h3>
               <div className="grid gap-4 sm:grid-cols-2">
-                <FormField label="Contract #" hint="Leave blank for auto-number">
-                  <input className={inputClass} value={form.contract_no} onChange={(e) => set('contract_no', e.target.value)} />
+                <FormField label="Contract #" hint={isEdit ? undefined : 'Leave blank for auto-number'}>
+                  <input
+                    className={inputClass}
+                    value={form.contract_no}
+                    onChange={(e) => set('contract_no', e.target.value)}
+                    disabled={isEdit}
+                  />
                 </FormField>
                 <FormField label="Date" required>
-                  <input type="date" className={inputClass} value={form.contract_date} onChange={(e) => set('contract_date', e.target.value)} />
+                  <DateInputDmy
+                    value={form.contract_date}
+                    onChange={(v) => set('contract_date', v)}
+                    required
+                  />
                 </FormField>
               </div>
             </section>
@@ -191,18 +248,17 @@ export function ContractFormPage() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="sm:col-span-2">
                   <FormField label="Company" required>
-                    <select
+                    <input
                       className={inputClass}
-                      value={form.company_id}
-                      onChange={(e) => onCompanyChange(e.target.value)}
-                      required
-                    >
-                      <option value="">Select company…</option>
-                      {companies.map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </select>
+                      value={isEdit ? companyName || company?.name || '' : company?.name ?? ''}
+                      disabled
+                    />
                   </FormField>
+                  {!form.company_id && (
+                    <p className="mt-1 text-xs text-amber-600">
+                      Go to Masters → Company and tick the checkbox for your working company.
+                    </p>
+                  )}
                 </div>
                 <FormField label="Seller" required>
                   <select
@@ -241,21 +297,15 @@ export function ContractFormPage() {
               </h3>
               <div className="grid gap-4 sm:grid-cols-2">
                 <FormField label="Commodity" required>
-                  <select className={inputClass} value={form.commodity_id} onChange={(e) => onCommodityChange(e.target.value)} required>
+                  <select
+                    className={inputClass}
+                    value={form.commodity_id}
+                    onChange={(e) => set('commodity_id', e.target.value)}
+                    required
+                  >
                     <option value="">Select…</option>
                     {commodities.map((c) => (
                       <option key={c.id} value={c.id}>{c.commodity_name}</option>
-                    ))}
-                  </select>
-                </FormField>
-                <FormField label="Quality Allowance" hint="Auto-filled from commodity">
-                  <textarea className={`${inputClass} min-h-[72px]`} value={form.quality_allowance} onChange={(e) => set('quality_allowance', e.target.value)} />
-                </FormField>
-                <FormField label="Weightment Rule">
-                  <select className={inputClass} value={form.weightment_unit_id} onChange={(e) => set('weightment_unit_id', e.target.value)}>
-                    <option value="">Optional…</option>
-                    {units.map((u) => (
-                      <option key={u.id} value={u.id}>{u.unit_name}</option>
                     ))}
                   </select>
                 </FormField>
@@ -276,13 +326,6 @@ export function ContractFormPage() {
                 <FormField label="Rate" required>
                   <input type="number" step="0.01" className={inputClass} value={form.rate} onChange={(e) => set('rate', e.target.value)} required />
                 </FormField>
-                <FormField label="Currency" required>
-                  <select className={inputClass} value={form.currency} onChange={(e) => set('currency', e.target.value)}>
-                    <option value="INR">INR</option>
-                    <option value="USD">USD</option>
-                    <option value="EUR">EUR</option>
-                  </select>
-                </FormField>
               </div>
             </section>
 
@@ -300,10 +343,18 @@ export function ContractFormPage() {
                   </select>
                 </FormField>
                 <FormField label="Despatch From" required>
-                  <input type="date" className={inputClass} value={form.despatch_from} onChange={(e) => set('despatch_from', e.target.value)} required />
+                  <DateInputDmy
+                    value={form.despatch_from}
+                    onChange={(v) => set('despatch_from', v)}
+                    required
+                  />
                 </FormField>
                 <FormField label="Despatch To" required>
-                  <input type="date" className={inputClass} value={form.despatch_to} onChange={(e) => set('despatch_to', e.target.value)} required />
+                  <DateInputDmy
+                    value={form.despatch_to}
+                    onChange={(v) => set('despatch_to', v)}
+                    required
+                  />
                 </FormField>
               </div>
             </section>
@@ -325,11 +376,11 @@ export function ContractFormPage() {
             </section>
 
             <div className="flex justify-end gap-3 border-t border-slate-100 pt-6">
-              <Link to="/contracts">
+              <Link to={isEdit && id ? `/contracts/${id}` : '/contracts'}>
                 <Button type="button" variant="secondary">Cancel</Button>
               </Link>
-              <Button type="submit" disabled={saving}>
-                {saving ? 'Creating…' : 'Create Contract'}
+              <Button type="submit" disabled={saving || !form.company_id}>
+                {saving ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Contract'}
               </Button>
             </div>
           </form>

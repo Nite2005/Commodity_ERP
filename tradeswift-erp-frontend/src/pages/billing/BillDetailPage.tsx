@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Printer } from 'lucide-react'
+import { ArrowLeft, Printer, Download } from 'lucide-react'
 import { billsApi, ApiClientError } from '../../api/client'
 import type { BillDetail } from '../../types'
 import { TaxInvoice } from '../../components/TaxInvoice'
 import { Button } from '../../components/Button'
 import { Alert } from '../../components/Modal'
+import { downloadInvoicePdf } from '../../lib/invoicePdf'
 
 export function BillDetailPage() {
   const { id } = useParams()
   const [bill, setBill] = useState<BillDetail | null>(null)
   const [error, setError] = useState('')
+  const [downloading, setDownloading] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -22,7 +24,20 @@ export function BillDetailPage() {
 
   const handlePrint = () => window.print()
 
-  if (error) {
+  const handleDownload = async () => {
+    if (!bill) return
+    setDownloading(true)
+    setError('')
+    try {
+      await downloadInvoicePdf(bill)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to download invoice PDF')
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  if (error && !bill) {
     return (
       <div className="mx-auto max-w-3xl">
         <Alert message={error} />
@@ -43,9 +58,16 @@ export function BillDetailPage() {
         >
           <ArrowLeft size={16} /> Back to Bills
         </Link>
-        <Button onClick={handlePrint}>
-          <Printer size={16} /> Print Invoice
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {error && <span className="self-center text-sm text-red-600">{error}</span>}
+          <Button variant="secondary" onClick={handleDownload} disabled={downloading}>
+            <Download size={16} />
+            {downloading ? 'Downloading…' : 'Download PDF'}
+          </Button>
+          <Button onClick={handlePrint}>
+            <Printer size={16} /> Print Invoice
+          </Button>
+        </div>
       </div>
 
       <TaxInvoice bill={bill} />

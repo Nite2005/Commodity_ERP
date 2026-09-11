@@ -53,7 +53,8 @@ button {
     padding: 0 !important;
   }
 
-  #tax-invoice {
+  #tax-invoice,
+  #contract-report {
     max-width: none;
     box-shadow: none;
   }

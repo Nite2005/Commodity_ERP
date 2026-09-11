@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Plus, Pencil, Trash2, RefreshCw } from 'lucide-react'
 import { mastersApi, ApiClientError } from '../../api/client'
-import type { Commodity, CustomerType, Currency, Party, QtyUnit, RateMaster } from '../../types'
+import type {
+  Commodity,
+  CustomerType,
+  Currency,
+  Party,
+  QtyUnit,
+  RateMaster,
+  RateType,
+} from '../../types'
 import { Card, CardBody, CardHeader } from '../../components/Card'
 import { Button } from '../../components/Button'
 import { DataTable } from '../../components/DataTable'
@@ -20,6 +28,7 @@ export function RatesPage() {
     party_id: '',
     customer_type: 'BUYER' as CustomerType,
     commodity_id: '',
+    rate_type: 'FIXED' as RateType,
     rate: '',
     unit: 'MT' as QtyUnit,
     currency: 'INR' as Currency,
@@ -29,6 +38,7 @@ export function RatesPage() {
 
   const partyMap = Object.fromEntries(parties.map((p) => [p.id, p.name]))
   const commMap = Object.fromEntries(commodities.map((c) => [c.id, c.commodity_name]))
+  const isPercentage = form.rate_type === 'PERCENTAGE'
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -58,6 +68,7 @@ export function RatesPage() {
       party_id: '',
       customer_type: 'BUYER',
       commodity_id: '',
+      rate_type: 'FIXED',
       rate: '',
       unit: 'MT',
       currency: 'INR',
@@ -72,6 +83,7 @@ export function RatesPage() {
       party_id: row.party_id,
       customer_type: row.customer_type,
       commodity_id: row.commodity_id,
+      rate_type: row.rate_type ?? 'FIXED',
       rate: String(row.rate),
       unit: row.unit,
       currency: row.currency,
@@ -87,6 +99,7 @@ export function RatesPage() {
       party_id: form.party_id,
       customer_type: form.customer_type,
       commodity_id: form.commodity_id,
+      rate_type: form.rate_type,
       rate: Number(form.rate),
       unit: form.unit,
       currency: form.currency,
@@ -110,11 +123,17 @@ export function RatesPage() {
     await load()
   }
 
+  const formatRate = (row: RateMaster) => {
+    const type = row.rate_type ?? 'FIXED'
+    if (type === 'PERCENTAGE') return `${row.rate}%`
+    return String(row.rate)
+  }
+
   return (
     <Card>
       <CardHeader
         title="Billing Rate"
-        subtitle="Party + commodity default billing rates and brokerage"
+        subtitle="Party + commodity default billing rates (fixed or percentage) and brokerage"
         action={
           <div className="flex gap-2">
             <Button variant="secondary" size="sm" onClick={load}>
@@ -144,7 +163,16 @@ export function RatesPage() {
                 label: 'Commodity',
                 render: (r) => commMap[r.commodity_id as string] ?? '—',
               },
-              { key: 'rate', label: 'Rate' },
+              {
+                key: 'rate_type',
+                label: 'Type',
+                render: (r) => ((r.rate_type as string) || 'FIXED') === 'PERCENTAGE' ? '%' : 'Fixed',
+              },
+              {
+                key: 'rate',
+                label: 'Rate',
+                render: (r) => formatRate(r as unknown as RateMaster),
+              },
               { key: 'unit', label: 'Unit' },
               { key: 'currency', label: 'Curr' },
               { key: 'brokerage', label: 'Brokerage' },
@@ -183,7 +211,12 @@ export function RatesPage() {
         )}
       </CardBody>
 
-      <Modal open={modalOpen} title={editing ? 'Edit Billing Rate' : 'New Billing Rate'} onClose={() => setModalOpen(false)} wide>
+      <Modal
+        open={modalOpen}
+        title={editing ? 'Edit Billing Rate' : 'New Billing Rate'}
+        onClose={() => setModalOpen(false)}
+        wide
+      >
         {error && modalOpen && (
           <div className="mb-4">
             <Alert message={error} />
@@ -231,9 +264,28 @@ export function RatesPage() {
               <option value="BOTH">Both</option>
             </select>
           </FormField>
-          <FormField label="Rate" required>
+          <FormField label="Rate Type" required>
+            <select
+              className={inputClass}
+              value={form.rate_type}
+              onChange={(e) =>
+                setForm({ ...form, rate_type: e.target.value as RateType })
+              }
+            >
+              <option value="FIXED">Fixed (amount)</option>
+              <option value="PERCENTAGE">Percentage (%)</option>
+            </select>
+          </FormField>
+          <FormField
+            label={isPercentage ? 'Rate (%)' : 'Rate'}
+            required
+            hint={isPercentage ? 'Commodity value percentage, max 100' : undefined}
+          >
             <input
               type="number"
+              step="0.01"
+              min="0"
+              max={isPercentage ? 100 : undefined}
               className={inputClass}
               value={form.rate}
               onChange={(e) => setForm({ ...form, rate: e.target.value })}
@@ -251,17 +303,19 @@ export function RatesPage() {
               <option value="BAGS">BAGS</option>
             </select>
           </FormField>
-          <FormField label="Currency" required>
-            <select
-              className={inputClass}
-              value={form.currency}
-              onChange={(e) => setForm({ ...form, currency: e.target.value as Currency })}
-            >
-              <option value="INR">INR</option>
-              <option value="USD">USD</option>
-              <option value="EUR">EUR</option>
-            </select>
-          </FormField>
+          {!isPercentage && (
+            <FormField label="Currency" required>
+              <select
+                className={inputClass}
+                value={form.currency}
+                onChange={(e) => setForm({ ...form, currency: e.target.value as Currency })}
+              >
+                <option value="INR">INR</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+              </select>
+            </FormField>
+          )}
           <FormField label="Brokerage (default)">
             <input
               type="number"

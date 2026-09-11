@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Plus, Pencil, Trash2, RefreshCw } from 'lucide-react'
 import { mastersApi, ApiClientError } from '../../api/client'
-import type { Company, CustomerType, Party } from '../../types'
+import type { CustomerType, Party } from '../../types'
+import { useSelectedCompany } from '../../context/SelectedCompanyContext'
 import { Card, CardBody, CardHeader } from '../../components/Card'
 import { Button } from '../../components/Button'
 import { DataTable } from '../../components/DataTable'
@@ -18,8 +20,7 @@ const customerTypes: { value: CustomerType; label: string }[] = [
   { value: 'BOTH', label: 'Both' },
 ]
 
-const emptyForm = (companyId = '') => ({
-  company_id: companyId,
+const emptyForm = () => ({
   name: '',
   short_name: '',
   customer_type: 'BUYER' as CustomerType,
@@ -31,13 +32,13 @@ const emptyForm = (companyId = '') => ({
   mobile: '',
   designation: '',
   account_no: '',
+  bank_name: '',
   ifsc_code: '',
 })
 
 export function PartiesPage() {
+  const { company } = useSelectedCompany()
   const [rows, setRows] = useState<Party[]>([])
-  const [companies, setCompanies] = useState<Company[]>([])
-  const [filterCompanyId, setFilterCompanyId] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
@@ -45,24 +46,22 @@ export function PartiesPage() {
   const [form, setForm] = useState(emptyForm())
   const [saving, setSaving] = useState(false)
 
-  const companyMap = Object.fromEntries(companies.map((c) => [c.id, c.name]))
-
   const load = useCallback(async () => {
+    if (!company) {
+      setRows([])
+      setLoading(false)
+      return
+    }
     setLoading(true)
     setError('')
     try {
-      const [parties, companyList] = await Promise.all([
-        mastersApi.parties.list({ companyId: filterCompanyId || undefined }),
-        mastersApi.companies.list(),
-      ])
-      setRows(parties)
-      setCompanies(companyList.filter((c) => c.is_active))
+      setRows(await mastersApi.parties.list({ companyId: company.id }))
     } catch (e) {
       setError(e instanceof ApiClientError ? e.message : 'Load failed')
     } finally {
       setLoading(false)
     }
-  }, [filterCompanyId])
+  }, [company])
 
   useEffect(() => {
     load()
@@ -70,14 +69,13 @@ export function PartiesPage() {
 
   const openCreate = () => {
     setEditing(null)
-    setForm(emptyForm(filterCompanyId))
+    setForm(emptyForm())
     setModalOpen(true)
   }
 
   const openEdit = (row: Party) => {
     setEditing(row)
     setForm({
-      company_id: row.company_id ?? '',
       name: row.name,
       short_name: row.short_name,
       customer_type: row.customer_type,
@@ -89,6 +87,7 @@ export function PartiesPage() {
       mobile: row.mobile ?? '',
       designation: row.designation ?? '',
       account_no: row.account_no ?? '',
+      bank_name: row.bank_name ?? '',
       ifsc_code: row.ifsc_code ?? '',
     })
     setModalOpen(true)
@@ -97,14 +96,14 @@ export function PartiesPage() {
   const set = (key: string, value: string) => setForm((f) => ({ ...f, [key]: value }))
 
   const save = async () => {
-    if (!form.company_id) {
-      setError('Please select a company.')
+    if (!company) {
+      setError('Select a company in Company Master first.')
       return
     }
     setSaving(true)
     setError('')
     const payload = {
-      company_id: form.company_id,
+      company_id: company.id,
       name: form.name,
       short_name: form.short_name,
       customer_type: form.customer_type,
@@ -116,6 +115,7 @@ export function PartiesPage() {
       mobile: form.mobile || null,
       designation: form.designation || null,
       account_no: form.account_no || null,
+      bank_name: form.bank_name || null,
       ifsc_code: form.ifsc_code || null,
     }
     try {
@@ -140,38 +140,35 @@ export function PartiesPage() {
     <Card>
       <CardHeader
         title="Party"
-        subtitle="Clients and counterparties linked to your company"
+        subtitle={
+          company
+            ? `Parties for ${company.name}`
+            : 'Clients and counterparties linked to the selected company'
+        }
         action={
           <div className="flex gap-2">
             <Button variant="secondary" size="sm" onClick={load}>
               <RefreshCw size={16} />
             </Button>
-            <Button size="sm" onClick={openCreate} disabled={companies.length === 0}>
+            <Button size="sm" onClick={openCreate} disabled={!company}>
               <Plus size={16} /> Add Party
             </Button>
           </div>
         }
       />
       <CardBody>
-        <div className="mb-4 flex flex-wrap items-end gap-4">
-          <FormField label="Filter by Company">
-            <select
-              className={`${inputClass} min-w-[220px]`}
-              value={filterCompanyId}
-              onChange={(e) => setFilterCompanyId(e.target.value)}
-            >
-              <option value="">All companies</option>
-              {companies.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} ({c.company_code})
-                </option>
-              ))}
-            </select>
-          </FormField>
-        </div>
-
-        {companies.length === 0 && !loading && (
-          <Alert message="Add a Company first (Masters → Company), then create parties under it." />
+        {!company && !loading && (
+          <Alert message="Select a company in Masters → Company (checkbox), then add parties." />
+        )}
+        {company && (
+          <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            Working company:{' '}
+            <span className="font-semibold text-slate-800">{company.name}</span>
+            {' · '}
+            <Link to="/masters/companies" className="text-brand-600 hover:underline">
+              Change in Company Master
+            </Link>
+          </div>
         )}
 
         {error && !modalOpen && <Alert message={error} />}
@@ -182,11 +179,6 @@ export function PartiesPage() {
           <DataTable
             columns={[
               { key: 'party_code', label: 'Code' },
-              {
-                key: 'company_id',
-                label: 'Company',
-                render: (r) => companyMap[r.company_id as string] ?? '—',
-              },
               { key: 'name', label: 'Party Name' },
               { key: 'short_name', label: 'Short' },
               { key: 'customer_type', label: 'Type' },
@@ -239,20 +231,8 @@ export function PartiesPage() {
           </div>
         )}
         <div className="grid gap-4 sm:grid-cols-2">
-          <FormField label="Company" required>
-            <select
-              className={inputClass}
-              value={form.company_id}
-              onChange={(e) => set('company_id', e.target.value)}
-              required
-            >
-              <option value="">Select company…</option>
-              {companies.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} ({c.company_code})
-                </option>
-              ))}
-            </select>
+          <FormField label="Company">
+            <input className={inputClass} value={company?.name ?? ''} disabled />
           </FormField>
           <FormField label="Party Name" required>
             <input
@@ -331,6 +311,14 @@ export function PartiesPage() {
               className={inputClass}
               value={form.designation}
               onChange={(e) => set('designation', e.target.value)}
+            />
+          </FormField>
+          <FormField label="Bank Name">
+            <input
+              className={inputClass}
+              value={form.bank_name}
+              onChange={(e) => set('bank_name', e.target.value)}
+              placeholder="e.g. HDFC Bank"
             />
           </FormField>
           <FormField label="Account No">

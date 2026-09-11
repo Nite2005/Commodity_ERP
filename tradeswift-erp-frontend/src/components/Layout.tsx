@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, Link } from 'react-router-dom'
 import {
   LayoutDashboard,
   Package,
@@ -11,9 +11,9 @@ import {
   Contact,
   TrendingUp,
   FileText,
-  Truck,
   Wheat,
 } from 'lucide-react'
+import { useSelectedCompany } from '../context/SelectedCompanyContext'
 
 const nav = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -29,11 +29,12 @@ const nav = [
   { to: '/masters/rates', label: 'Billing Rate', icon: TrendingUp },
   { section: 'Transactions' },
   { to: '/contracts', label: 'Contracts', icon: FileText },
-  { to: '/despatches', label: 'Despatches', icon: Truck },
-  { to: '/billing', label: 'Billing', icon: Receipt },
+  { to: '/billing', label: 'Bills', icon: Receipt },
 ]
 
 export function Layout() {
+  const { company, loading } = useSelectedCompany()
+
   return (
     <div className="flex h-full min-h-screen">
       <aside className="fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-sidebar text-slate-300">
@@ -83,9 +84,28 @@ export function Layout() {
 
       <main className="ml-64 flex min-h-screen flex-1 flex-col">
         <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 px-8 py-4 backdrop-blur">
-          <div>
-            <h1 className="text-xl font-semibold text-slate-900">Tradeswift ERP</h1>
-            <p className="text-sm text-slate-500">Physical commodity trading management</p>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h1 className="text-xl font-semibold text-slate-900">Tradeswift ERP</h1>
+              <p className="text-sm text-slate-500">Physical commodity trading management</p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-right">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                Working Company
+              </div>
+              {loading ? (
+                <div className="text-sm text-slate-400">Loading…</div>
+              ) : company ? (
+                <div className="text-sm font-semibold text-slate-800">{company.name}</div>
+              ) : (
+                <Link
+                  to="/masters/companies"
+                  className="text-sm font-medium text-brand-600 hover:underline"
+                >
+                  Select a company
+                </Link>
+              )}
+            </div>
           </div>
         </header>
         <div className="flex-1 p-8">

@@ -87,6 +87,8 @@ export const mastersApi = {
     create: (data: object) => api.post<import('../types').Company>('/masters/companies', data),
     update: (id: string, data: object) =>
       api.put<import('../types').Company>(`/masters/companies/${id}`, data),
+    select: (id: string) =>
+      api.post<import('../types').Company>(`/masters/companies/${id}/select`, {}),
     remove: (id: string) => api.delete(`/masters/companies/${id}`),
   },
   contacts: {
@@ -153,10 +155,55 @@ export const billsApi = {
     return api.get<import('../types').Bill[]>(`/bills${qs}`)
   },
   get: (id: string) => api.get<import('../types').BillDetail>(`/bills/${id}`),
+  billableContracts: (params: {
+    partyId: string
+    fromDate?: string
+    toDate?: string
+    companyId?: string
+  }) => {
+    const search = new URLSearchParams({ party_id: params.partyId })
+    if (params.fromDate) search.set('date_from', params.fromDate)
+    if (params.toDate) search.set('date_to', params.toDate)
+    if (params.companyId) search.set('company_id', params.companyId)
+    return api.get<import('../types').BillableContract[]>(
+      `/bills/billable-contracts?${search}`,
+    )
+  },
   create: (data: object) =>
     api.post<{ bill_no: string; id: string; message: string }>('/bills', data),
 }
 
 export const healthApi = {
   check: () => api.get<{ status: string }>('/health'),
+}
+
+async function downloadFile(path: string, fallbackName: string) {
+  const res = await fetch(`${BASE}${path}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new ApiClientError(parseError(res.status, body as ApiError), res.status)
+  }
+  const blob = await res.blob()
+  const disposition = res.headers.get('Content-Disposition') ?? ''
+  const match = /filename="?([^"]+)"?/i.exec(disposition)
+  const filename = match?.[1] ?? fallbackName
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
+
+export const reportsApi = {
+  downloadContractRegister: (params?: Record<string, string>) => {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : ''
+    return downloadFile(`/reports/contract-register/export${qs}`, 'contract-register.csv')
+  },
+  downloadSalesRegister: (params?: Record<string, string>) => {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : ''
+    return downloadFile(`/reports/sales-register/export${qs}`, 'bills-report.csv')
+  },
 }

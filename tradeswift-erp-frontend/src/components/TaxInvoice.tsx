@@ -124,9 +124,9 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
             <thead>
               <tr className="border-b-2 border-slate-800 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
                 <th className="px-3 py-3">#</th>
+                <th className="px-3 py-3">Contract</th>
                 <th className="px-3 py-3">Despatch</th>
                 <th className="px-3 py-3">Date</th>
-                <th className="px-3 py-3">Contract</th>
                 <th className="px-3 py-3">Description</th>
                 <th className="px-3 py-3 text-right">Qty</th>
                 <th className="px-3 py-3 text-right">Rate</th>
@@ -137,11 +137,13 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
               {bill.line_items.map((line, idx) => (
                 <tr key={line.id} className="hover:bg-slate-50/50">
                   <td className="px-3 py-3 text-slate-500">{idx + 1}</td>
-                  <td className="px-3 py-3 font-mono text-xs font-medium">{line.despatch_no}</td>
+                  <td className="px-3 py-3 font-mono text-xs">#{line.contract_no}</td>
+                  <td className="px-3 py-3 font-mono text-xs font-medium">
+                    {line.despatch_no || '—'}
+                  </td>
                   <td className="px-3 py-3 whitespace-nowrap">
                     {line.despatch_date ? formatDate(line.despatch_date) : '—'}
                   </td>
-                  <td className="px-3 py-3 font-mono text-xs">#{line.contract_no}</td>
                   <td className="px-3 py-3">
                     <div className="font-medium">{line.commodity_name ?? line.commodity_short_name}</div>
                     {line.commodity_name && line.commodity_short_name && (

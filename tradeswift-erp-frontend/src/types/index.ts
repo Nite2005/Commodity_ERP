@@ -9,6 +9,7 @@ export type CustomerType =
 
 export type QtyUnit = 'MT' | 'KGS' | 'QUINTAL' | 'BAGS'
 export type Currency = 'INR' | 'USD' | 'EUR'
+export type RateType = 'FIXED' | 'PERCENTAGE'
 export type PaymentTermType = 'ADVANCE' | 'NET_DAYS'
 export type ContractType = 'NEW' | 'AMENDMENT' | 'CANCEL'
 export type ContractStatus = 'CONTRACT_OPEN' | 'CLOSED' | 'CANCELLED'
@@ -63,6 +64,7 @@ export interface Party {
   state: string
   pincode: string
   account_no: string | null
+  bank_name: string | null
   ifsc_code: string | null
   phone: string | null
   mobile: string | null
@@ -83,6 +85,7 @@ export interface Company {
   bank_name: string | null
   ifsc_code: string | null
   phone: string | null
+  is_selected: boolean
   is_active: boolean
   created_at: string
 }
@@ -116,6 +119,7 @@ export interface RateMaster {
   party_id: string
   customer_type: CustomerType
   commodity_id: string
+  rate_type: RateType
   rate: number
   unit: QtyUnit
   currency: Currency
@@ -131,7 +135,9 @@ export interface ContractBalance {
   qty_high: number
   final_qty: number | null
   fulfilled_qty: number
+  billed_qty: number
   remaining_qty: number
+  remaining_billable: number
   max_allowed_qty: number
   tolerance_percent: number
   status: ContractStatus
@@ -222,6 +228,23 @@ export interface UnbilledDespatch {
   delivery_type: string | null
 }
 
+export interface BillableContract {
+  id: string
+  contract_no: string
+  contract_date: string
+  status: ContractStatus
+  seller_name: string | null
+  buyer_name: string | null
+  commodity_short_name: string | null
+  commodity_name: string | null
+  qty_unit: string
+  rate: number
+  billing_qty: number
+  billed_qty: number
+  remaining_billable: number
+  tax_id: string
+}
+
 export interface Bill {
   id: string
   bill_no: string
@@ -243,7 +266,7 @@ export interface Bill {
 
 export interface BillLineItem {
   id: string
-  despatch_id: string
+  despatch_id: string | null
   contract_id: string
   quantity: number
   rate: number
