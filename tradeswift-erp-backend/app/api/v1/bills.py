@@ -13,12 +13,13 @@ from app.schemas.bill import (
     BillResponse,
 )
 from app.services.billing_service import BillingService
-from app.utils.ids import as_db_id
+from app.utils.ids import as_db_id, uuid_variants
 
 router = APIRouter(prefix="/bills", tags=["Bills"])
 
 
 def _load_bill(db: Session, bill_id: str) -> Bill:
+    variants = uuid_variants(bill_id)
     row = (
         db.query(Bill)
         .options(
@@ -35,7 +36,7 @@ def _load_bill(db: Session, bill_id: str) -> Bill:
                 Contract.buyer
             ),
         )
-        .filter(Bill.id == as_db_id(bill_id))
+        .filter((Bill.id.in_(variants)) | (Bill.bill_no == bill_id))
         .first()
     )
     if not row:
@@ -55,7 +56,7 @@ def list_bills(
     if active_only:
         q = q.filter(Bill.is_active.is_(True))
     if party_id:
-        q = q.filter(Bill.party_id == as_db_id(party_id))
+        q = q.filter(Bill.party_id.in_(uuid_variants(party_id)))
     if date_from:
         q = q.filter(Bill.bill_date >= date_from)
     if date_to:

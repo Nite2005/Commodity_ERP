@@ -8,6 +8,7 @@ import { Button } from '../../components/Button'
 import { DataTable } from '../../components/DataTable'
 import { Modal, FormField, inputClass, Alert } from '../../components/Modal'
 import { Badge } from '../../components/Badge'
+import { useActiveUser } from '../../context/UserContext'
 
 const emptyForm = () => ({
   name: '',
@@ -21,6 +22,7 @@ const emptyForm = () => ({
 
 export function CompaniesPage() {
   const { refresh: refreshSelected } = useSelectedCompany()
+  const { isAdmin } = useActiveUser()
   const [rows, setRows] = useState<Company[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -81,8 +83,14 @@ export function CompaniesPage() {
       phone: form.phone || null,
     }
     try {
-      if (editing) await mastersApi.companies.update(editing.id, payload)
-      else await mastersApi.companies.create(payload)
+      if (editing) {
+        await mastersApi.companies.update(editing.id, payload)
+        if (!isAdmin) {
+          alert('Change request submitted! Since you are signed in as an Employee, changes are not updated immediately and have been routed to the Governance → Approvals section for Administrator approval.')
+        }
+      } else {
+        await mastersApi.companies.create(payload)
+      }
       setModalOpen(false)
       await load()
       await refreshSelected()
@@ -126,12 +134,14 @@ export function CompaniesPage() {
         subtitle="Select one company — that company is used across the whole ERP"
         action={
           <div className="flex gap-2">
-            <Button variant="secondary" size="sm" onClick={load}>
-              <RefreshCw size={16} />
+            <Button variant="secondary" size="sm" onClick={load} disabled={loading} title="Reload companies">
+              <RefreshCw size={16} className={loading ? 'animate-spin text-brand-600' : ''} />
             </Button>
-            <Button size="sm" onClick={openCreate}>
-              <Plus size={16} /> Add New
-            </Button>
+            {isAdmin && (
+              <Button size="sm" onClick={openCreate}>
+                <Plus size={16} /> Add New
+              </Button>
+            )}
           </div>
         }
       />
@@ -178,18 +188,20 @@ export function CompaniesPage() {
               {
                 key: 'actions',
                 label: '',
-                render: (r) => (
+                render: (r: Record<string, unknown>) => (
                   <div className="flex gap-1">
                     <button
                       onClick={() => openEdit(r as unknown as Company)}
                       className="rounded p-1.5 text-slate-400 hover:text-brand-600"
+                      title="Edit Company"
                     >
                       <Pencil size={16} />
                     </button>
-                    {(r.is_active as boolean) && (
+                    {isAdmin && (r.is_active as boolean) && (
                       <button
                         onClick={() => remove(r.id as string)}
                         className="rounded p-1.5 text-slate-400 hover:text-red-600"
+                        title="Deactivate Company"
                       >
                         <Trash2 size={16} />
                       </button>

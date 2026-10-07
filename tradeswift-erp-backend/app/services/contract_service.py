@@ -29,7 +29,9 @@ class ContractService:
 
     @staticmethod
     def _require_party_for_company(party: Party, company_id: str, label: str) -> None:
-        if party.company_id != company_id:
+        p_comp = str(party.company_id or "").replace("-", "")
+        c_comp = str(company_id or "").replace("-", "")
+        if p_comp != c_comp:
             raise HTTPException(
                 status_code=400,
                 detail=f"{label} does not belong to the selected company.",
@@ -68,22 +70,27 @@ class ContractService:
     @classmethod
     def create(cls, db: Session, payload: ContractCreate) -> Contract:
         company = cls._require_active_fk(db, Company, payload.company_id, "Company")
-        company_id = as_db_id(payload.company_id)
         seller = cls._require_active_party(db, payload.seller_id, "Seller")
         buyer = cls._require_active_party(db, payload.buyer_id, "Buyer")
-        cls._validate_parties_for_company(seller, buyer, company_id)
-        cls._require_active_fk(db, Commodity, payload.commodity_id, "Commodity")
-        cls._require_active_fk(db, Tax, payload.tax_id, "Tax")
-        cls._require_active_fk(db, Broker, payload.broker_id, "Broker")
-        if payload.payment_term_id:
+        cls._validate_parties_for_company(seller, buyer, str(company.id))
+        commodity = cls._require_active_fk(db, Commodity, payload.commodity_id, "Commodity")
+        tax = cls._require_active_fk(db, Tax, payload.tax_id, "Tax")
+        broker = cls._require_active_fk(db, Broker, payload.broker_id, "Broker")
+        payment_term = (
             cls._require_active_fk(db, PaymentTerm, payload.payment_term_id, "Payment term")
-        if payload.weightment_unit_id:
+            if payload.payment_term_id
+            else None
+        )
+        weightment_unit = (
             cls._require_active_fk(db, Unit, payload.weightment_unit_id, "Weightment unit")
+            if payload.weightment_unit_id
+            else None
+        )
 
-        commodity = db_get(db, Commodity, payload.commodity_id)
+        commodity_row = db_get(db, Commodity, payload.commodity_id)
         quality = payload.quality_allowance
-        if quality is None and commodity:
-            quality = commodity.quality_allowance
+        if quality is None and commodity_row:
+            quality = commodity_row.quality_allowance
 
         contract_no = cls._resolve_contract_no(db, payload.contract_no)
         contract_date = payload.contract_date or date.today()
@@ -92,25 +99,27 @@ class ContractService:
             contract_no=contract_no,
             contract_type=payload.contract_type,
             contract_date=contract_date,
-            company_id=company_id,
-            seller_id=as_db_id(payload.seller_id),
-            buyer_id=as_db_id(payload.buyer_id),
+            company_id=str(company.id),
+            seller_id=str(seller.id),
+            buyer_id=str(buyer.id),
             is_nominee=payload.is_nominee,
-            commodity_id=as_db_id(payload.commodity_id),
+            commodity_id=str(commodity.id),
             quality_allowance=quality,
+            notes=payload.notes,
             packing=payload.packing.strip(),
             qty_low=payload.qty_low,
             qty_high=payload.qty_high,
             qty_unit=payload.qty_unit,
             rate=payload.rate,
             currency=payload.currency,
-            tax_id=as_db_id(payload.tax_id),
-            payment_term_id=as_db_id(payload.payment_term_id) if payload.payment_term_id else None,
-            weightment_unit_id=as_db_id(payload.weightment_unit_id) if payload.weightment_unit_id else None,
+            tax_id=str(tax.id),
+            payment_term_id=str(payment_term.id) if payment_term else None,
+            weightment_unit_id=str(weightment_unit.id) if weightment_unit else None,
             despatch_from=payload.despatch_from,
             despatch_to=payload.despatch_to,
-            broker_id=as_db_id(payload.broker_id),
+            broker_id=str(broker.id),
             broker_rate=payload.broker_rate,
+            broker_rate_type=payload.broker_rate_type,
             status=cls._initial_status(payload.contract_type),
         )
         cls._apply_print_options(row, payload.print_options)
@@ -135,18 +144,16 @@ class ContractService:
         if str(seller_id) == str(buyer_id):
             raise HTTPException(status_code=400, detail="Seller & Buyer cannot be the same party.")
 
-        company_id = as_db_id(data["company_id"]) if "company_id" in data else row.company_id
         if "company_id" in data:
-            cls._require_active_fk(db, Company, data["company_id"], "Company")
+            comp = cls._require_active_fk(db, Company, data["company_id"], "Company")
+            company_id = str(comp.id)
             data["company_id"] = company_id
+        else:
+            company_id = row.company_id
 
         if company_id:
-            seller = db_get(db, Party, seller_id)
-            buyer = db_get(db, Party, buyer_id)
-            if not seller or not seller.is_active:
-                raise HTTPException(status_code=400, detail="Seller not found or inactive.")
-            if not buyer or not buyer.is_active:
-                raise HTTPException(status_code=400, detail="Buyer not found or inactive.")
+            seller = cls._require_active_party(db, seller_id, "Seller")
+            buyer = cls._require_active_party(db, buyer_id, "Buyer")
             cls._validate_parties_for_company(seller, buyer, company_id)
 
         despatch_from = data.get("despatch_from", row.despatch_from)
@@ -171,6 +178,7 @@ class ContractService:
             data["contract_no"] = no
 
         fk_map = {
+            "company_id": ("Company", Company),
             "seller_id": ("Seller", Party),
             "buyer_id": ("Buyer", Party),
             "commodity_id": ("Commodity", Commodity),
@@ -181,9 +189,11 @@ class ContractService:
         }
         for field, (label, model) in fk_map.items():
             if field in data and data[field] is not None:
-                if field not in ("seller_id", "buyer_id"):
-                    cls._require_active_fk(db, model, data[field], label)
-                data[field] = as_db_id(data[field])
+                if field in ("seller_id", "buyer_id"):
+                    fk_row = cls._require_active_party(db, data[field], label)
+                else:
+                    fk_row = cls._require_active_fk(db, model, data[field], label)
+                data[field] = str(fk_row.id)
 
         # Changing type only resets status while the contract is still open.
         if "contract_type" in data and row.status == ContractStatus.CONTRACT_OPEN:

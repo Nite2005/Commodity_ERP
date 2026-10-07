@@ -6,6 +6,7 @@ import { DataTable } from './DataTable'
 import { Modal, Alert, FormField, inputClass } from './Modal'
 import { Badge } from './Badge'
 import { ApiClientError } from '../api/client'
+import { useActiveUser } from '../context/UserContext'
 
 export interface FieldConfig {
   name: string
@@ -42,6 +43,7 @@ export function MasterCrud<T extends { id: string; is_active: boolean }>({
   toForm,
   fromForm,
 }: MasterCrudProps<T>) {
+  const { isAdmin } = useActiveUser()
   const [rows, setRows] = useState<T[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -83,8 +85,14 @@ export function MasterCrud<T extends { id: string; is_active: boolean }>({
     setError('')
     try {
       const payload = fromForm ? fromForm(form) : form
-      if (editing) await updateFn(editing.id, payload)
-      else await createFn(payload)
+      if (editing) {
+        await updateFn(editing.id, payload)
+        if (!isAdmin) {
+          alert('Change request submitted! Since you are signed in as an Employee, changes are not updated immediately and have been routed to the Governance → Approvals section for Administrator approval.')
+        }
+      } else {
+        await createFn(payload)
+      }
       setModalOpen(false)
       await load()
     } catch (e) {
@@ -121,13 +129,15 @@ export function MasterCrud<T extends { id: string; is_active: boolean }>({
           <button
             onClick={() => openEdit(row as T)}
             className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600"
+            title="Edit Record"
           >
             <Pencil size={16} />
           </button>
-          {(row.is_active as boolean) && (
+          {isAdmin && (row.is_active as boolean) && (
             <button
               onClick={() => handleDelete(row as T)}
               className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
+              title="Deactivate Record"
             >
               <Trash2 size={16} />
             </button>
@@ -144,12 +154,14 @@ export function MasterCrud<T extends { id: string; is_active: boolean }>({
         subtitle={subtitle}
         action={
           <div className="flex gap-2">
-            <Button variant="secondary" size="sm" onClick={load}>
-              <RefreshCw size={16} />
+            <Button variant="secondary" size="sm" onClick={load} disabled={loading} title="Reload records">
+              <RefreshCw size={16} className={loading ? 'animate-spin text-brand-600' : ''} />
             </Button>
-            <Button size="sm" onClick={openCreate}>
-              <Plus size={16} /> Add New
-            </Button>
+            {isAdmin && (
+              <Button size="sm" onClick={openCreate}>
+                <Plus size={16} /> Add New
+              </Button>
+            )}
           </div>
         }
       />

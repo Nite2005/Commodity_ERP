@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.enums import ContractStatus
-from app.schemas.report import ContractRegisterRow, SalesRegisterRow
+from app.schemas.report import ContractRegisterRow, PartyLedgerResponse, SalesRegisterRow
 from app.services.report_service import ReportService
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
@@ -174,3 +174,12 @@ def export_sales_register(
     )
     csv_text = ReportService.to_csv(SALES_CSV_HEADERS, rows, SALES_CSV_KEYS)
     return _csv_response(csv_text, "bills-report.csv")
+
+
+@router.get("/party-ledger/{party_id}", response_model=PartyLedgerResponse)
+def get_party_ledger(
+    party_id: str,
+    db: Session = Depends(get_db),
+):
+    return ReportService.get_party_ledger(db, party_id)
+

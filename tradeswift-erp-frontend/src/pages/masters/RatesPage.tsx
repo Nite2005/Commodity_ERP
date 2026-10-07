@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Plus, Pencil, Trash2, RefreshCw } from 'lucide-react'
+import { Plus, Pencil, Trash2, RefreshCw, ShieldCheck, History } from 'lucide-react'
 import { mastersApi, ApiClientError } from '../../api/client'
+import { ChangeLogModal } from '../../components/ChangeLogModal'
 import type {
   Commodity,
   CustomerType,
@@ -15,8 +16,10 @@ import { Button } from '../../components/Button'
 import { DataTable } from '../../components/DataTable'
 import { Modal, FormField, inputClass, Alert } from '../../components/Modal'
 import { Badge } from '../../components/Badge'
+import { useActiveUser } from '../../context/UserContext'
 
 export function RatesPage() {
+  const { isAdmin } = useActiveUser()
   const [rows, setRows] = useState<RateMaster[]>([])
   const [parties, setParties] = useState<Party[]>([])
   const [commodities, setCommodities] = useState<Commodity[]>([])
@@ -24,6 +27,7 @@ export function RatesPage() {
   const [error, setError] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<RateMaster | null>(null)
+  const [historyRate, setHistoryRate] = useState<RateMaster | null>(null)
   const [form, setForm] = useState({
     party_id: '',
     customer_type: 'BUYER' as CustomerType,
@@ -32,6 +36,7 @@ export function RatesPage() {
     rate: '',
     unit: 'MT' as QtyUnit,
     currency: 'INR' as Currency,
+    brokerage_type: 'FIXED' as RateType,
     brokerage: '0',
   })
   const [saving, setSaving] = useState(false)
@@ -63,6 +68,7 @@ export function RatesPage() {
   }, [load])
 
   const openCreate = () => {
+    if (!isAdmin) return
     setEditing(null)
     setForm({
       party_id: '',
@@ -72,6 +78,7 @@ export function RatesPage() {
       rate: '',
       unit: 'MT',
       currency: 'INR',
+      brokerage_type: 'FIXED',
       brokerage: '0',
     })
     setModalOpen(true)
@@ -87,6 +94,7 @@ export function RatesPage() {
       rate: String(row.rate),
       unit: row.unit,
       currency: row.currency,
+      brokerage_type: row.brokerage_type ?? 'FIXED',
       brokerage: String(row.brokerage),
     })
     setModalOpen(true)
@@ -103,11 +111,18 @@ export function RatesPage() {
       rate: Number(form.rate),
       unit: form.unit,
       currency: form.currency,
+      brokerage_type: form.brokerage_type,
       brokerage: Number(form.brokerage || 0),
     }
     try {
-      if (editing) await mastersApi.rates.update(editing.id, payload)
-      else await mastersApi.rates.create(payload)
+      if (editing) {
+        const res = await mastersApi.rates.update(editing.id, payload)
+        if (!isAdmin || res.has_pending_approval) {
+          alert('Change request submitted! Since you are signed in as an Employee, changes are not updated immediately and have been routed to the Governance → Approvals section for Administrator approval.')
+        }
+      } else {
+        await mastersApi.rates.create(payload)
+      }
       setModalOpen(false)
       await load()
     } catch (e) {
@@ -118,6 +133,7 @@ export function RatesPage() {
   }
 
   const remove = async (id: string) => {
+    if (!isAdmin) return
     if (!confirm('Deactivate this billing rate?')) return
     await mastersApi.rates.remove(id)
     await load()
@@ -136,12 +152,14 @@ export function RatesPage() {
         subtitle="Party + commodity default billing rates (fixed or percentage) and brokerage"
         action={
           <div className="flex gap-2">
-            <Button variant="secondary" size="sm" onClick={load}>
-              <RefreshCw size={16} />
+            <Button variant="secondary" size="sm" onClick={load} disabled={loading} title="Reload billing rates">
+              <RefreshCw size={16} className={loading ? 'animate-spin text-brand-600' : ''} />
             </Button>
-            <Button size="sm" onClick={openCreate}>
-              <Plus size={16} /> Add Billing Rate
-            </Button>
+            {isAdmin && (
+              <Button size="sm" onClick={openCreate}>
+                <Plus size={16} /> Add Billing Rate
+              </Button>
+            )}
           </div>
         }
       />
@@ -152,7 +170,23 @@ export function RatesPage() {
         ) : (
           <DataTable
             columns={[
-              { key: 'rate_code', label: 'Code' },
+              {
+                key: 'rate_code',
+                label: 'Code',
+                render: (r) => {
+                  const rateItem = r as unknown as RateMaster
+                  return (
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-medium text-slate-800">{rateItem.rate_code}</span>
+                      {rateItem.has_pending_approval && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                          ⏳ Pending Approval
+                        </span>
+                      )}
+                    </div>
+                  )
+                },
+              },
               {
                 key: 'party_id',
                 label: 'Party',
@@ -175,7 +209,16 @@ export function RatesPage() {
               },
               { key: 'unit', label: 'Unit' },
               { key: 'currency', label: 'Curr' },
-              { key: 'brokerage', label: 'Brokerage' },
+              {
+                key: 'brokerage',
+                label: 'Brokerage',
+                render: (r) => {
+                  const item = r as unknown as RateMaster
+                  if (item.brokerage == null || item.brokerage === 0) return '—'
+                  if (item.brokerage_type === 'PERCENTAGE') return `${item.brokerage}% of value`
+                  return `${item.brokerage} / ${item.unit || 'MT'}`
+                },
+              },
               {
                 key: 'status',
                 label: 'Status',
@@ -186,24 +229,37 @@ export function RatesPage() {
               {
                 key: 'actions',
                 label: '',
-                render: (r) => (
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => openEdit(r as unknown as RateMaster)}
-                      className="rounded p-1.5 text-slate-400 hover:text-brand-600"
-                    >
-                      <Pencil size={16} />
-                    </button>
-                    {(r.is_active as boolean) && (
+                render: (r) => {
+                  const rateItem = r as unknown as RateMaster
+                  return (
+                    <div className="flex items-center gap-1">
                       <button
-                        onClick={() => remove(r.id as string)}
-                        className="rounded p-1.5 text-slate-400 hover:text-red-600"
+                        type="button"
+                        onClick={() => setHistoryRate(rateItem)}
+                        className="rounded p-1.5 text-slate-400 hover:text-indigo-600 transition-colors"
+                        title="View Change Log & Supervisor Approvals"
                       >
-                        <Trash2 size={16} />
+                        <History size={16} />
                       </button>
-                    )}
-                  </div>
-                ),
+                      <button
+                        onClick={() => openEdit(rateItem)}
+                        className="rounded p-1.5 text-slate-400 hover:text-brand-600"
+                        title="Edit Rate"
+                      >
+                        <Pencil size={16} />
+                      </button>
+                      {isAdmin && (r.is_active as boolean) && (
+                        <button
+                          onClick={() => remove(r.id as string)}
+                          className="rounded p-1.5 text-slate-400 hover:text-red-600"
+                          title="Deactivate"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
+                  )
+                },
               },
             ]}
             rows={rows as unknown as Record<string, unknown>[]}
@@ -220,6 +276,31 @@ export function RatesPage() {
         {error && modalOpen && (
           <div className="mb-4">
             <Alert message={error} />
+          </div>
+        )}
+        {editing && (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-900 flex items-start gap-2.5">
+            <ShieldCheck className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+            <div className="flex-1">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <p className="font-semibold text-amber-800">Multi-Gate Supervisor Authorization Policy</p>
+                <button
+                  type="button"
+                  onClick={() => setHistoryRate(editing)}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold text-indigo-700 bg-white border border-indigo-200 hover:bg-indigo-50 shadow-xs"
+                >
+                  <History size={12} /> View Change Log
+                </button>
+              </div>
+              <p className="text-amber-700 mt-0.5">
+                Edits to sensitive rate definitions (Base Rate & Brokerage) are automatically staged and routed to Supervisors (Kannu / Kanha) in Governance → Approvals for verification before taking final effect.
+              </p>
+              {editing.has_pending_approval && (
+                <p className="mt-1 font-medium text-amber-900 bg-amber-100/80 px-2 py-0.5 rounded inline-block">
+                  ⏳ This rate definition currently has pending changes awaiting supervisor review.
+                </p>
+              )}
+            </div>
           </div>
         )}
         <div className="grid gap-4 sm:grid-cols-2">
@@ -316,9 +397,31 @@ export function RatesPage() {
               </select>
             </FormField>
           )}
-          <FormField label="Brokerage (default)">
+          <FormField label="Brokerage Type" required>
+            <select
+              className={inputClass}
+              value={form.brokerage_type}
+              onChange={(e) =>
+                setForm({ ...form, brokerage_type: e.target.value as RateType })
+              }
+            >
+              <option value="FIXED">Fixed (Per Unit / {form.unit || 'MT'})</option>
+              <option value="PERCENTAGE">Percentage (% of Transaction Value)</option>
+            </select>
+          </FormField>
+          <FormField
+            label={form.brokerage_type === 'PERCENTAGE' ? 'Brokerage (% of Value)' : `Brokerage (₹ / ${form.unit || 'MT'})`}
+            hint={
+              form.brokerage_type === 'PERCENTAGE'
+                ? 'Brokerage calculated on total transaction value, not MT quantity'
+                : `Fixed brokerage per ${form.unit || 'MT'}`
+            }
+          >
             <input
               type="number"
+              step="0.01"
+              min="0"
+              max={form.brokerage_type === 'PERCENTAGE' ? 100 : undefined}
               className={inputClass}
               value={form.brokerage}
               onChange={(e) => setForm({ ...form, brokerage: e.target.value })}
@@ -334,6 +437,14 @@ export function RatesPage() {
           </Button>
         </div>
       </Modal>
+
+      <ChangeLogModal
+        open={Boolean(historyRate)}
+        onClose={() => setHistoryRate(null)}
+        entityId={historyRate?.id ?? null}
+        entityName={`Rate ${historyRate?.rate_code ?? ''} (${partyMap[historyRate?.party_id ?? ''] ?? 'Party'})`}
+        entityType="RATE_MASTER"
+      />
     </Card>
   )
 }

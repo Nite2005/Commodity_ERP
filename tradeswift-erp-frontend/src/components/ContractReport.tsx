@@ -114,12 +114,25 @@ export function ContractReport({ contract }: ContractReportProps) {
               label="Broker"
               value={
                 contract.broker_name
-                  ? `${contract.broker_name} @ ${contract.broker_rate}`
+                  ? contract.broker_rate_type === 'PERCENTAGE'
+                    ? `${contract.broker_name} @ ${contract.broker_rate}% of value`
+                    : `${contract.broker_name} @ ₹${contract.broker_rate} / ${contract.qty_unit || 'MT'}`
                   : null
               }
             />
           </section>
         </div>
+
+        {contract.notes && (
+          <div className="mt-6 border-b border-slate-200 pb-6">
+            <h2 className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+              Operational Remarks & Deal Notes
+            </h2>
+            <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed bg-slate-50 p-3 rounded border border-slate-100">
+              {contract.notes}
+            </p>
+          </div>
+        )}
 
         <footer className="mt-10 border-t border-slate-200 pt-6">
           <div className="grid gap-8 sm:grid-cols-2">

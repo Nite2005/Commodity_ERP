@@ -59,9 +59,18 @@ class BillLineItemResponse(ORMModel):
     despatch_no: str | None = None
     despatch_date: date | None = None
     contract_no: str | None = None
+    contract_date: date | None = None
     commodity_short_name: str | None = None
     commodity_name: str | None = None
     qty_unit: str | None = None
+    seller_name: str | None = None
+    buyer_name: str | None = None
+    seller_id: UUID | None = None
+    buyer_id: UUID | None = None
+    bags: int | None = None
+    broker_rate: Decimal | None = None
+    broker_rate_type: str | None = None
+    line_brokerage_amount: Decimal | None = None
 
 
 class BillResponse(ORMModel):
@@ -99,6 +108,17 @@ class BillDetailResponse(BillResponse):
     buyer_name: str | None = None
     seller_state: str | None = None
     buyer_state: str | None = None
+    company_name: str | None = None
+    company_address: str | None = None
+    company_city: str | None = None
+    company_state: str | None = None
+    company_pincode: str | None = None
+    company_gstin: str | None = None
+    company_pan: str | None = None
+    company_phone: str | None = None
+    company_bank_name: str | None = None
+    company_account_no: str | None = None
+    company_ifsc_code: str | None = None
     line_items: list[BillLineItemResponse] = []
 
 

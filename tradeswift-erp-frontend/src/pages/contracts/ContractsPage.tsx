@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, RefreshCw, Eye, Pencil, Download, FileArchive } from 'lucide-react'
-import { contractsApi, reportsApi, ApiClientError } from '../../api/client'
-import type { Contract } from '../../types'
+import { Plus, RefreshCw, Eye, Pencil, Download, FileArchive, ArrowUpDown, Wallet } from 'lucide-react'
+import { contractsApi, mastersApi, reportsApi, ApiClientError } from '../../api/client'
+import type { Contract, Party } from '../../types'
 import { useSelectedCompany } from '../../context/SelectedCompanyContext'
 import { Card, CardBody, CardHeader } from '../../components/Card'
 import { Button } from '../../components/Button'
@@ -10,15 +10,20 @@ import { DataTable } from '../../components/DataTable'
 import { Badge } from '../../components/Badge'
 import { Alert } from '../../components/Modal'
 import { DateInputDmy } from '../../components/DateInputDmy'
+import { PartyMultiSelect } from '../../components/PartyMultiSelect'
 import { formatDateDmy } from '../../lib/dates'
 import {
   downloadContractReportPdf,
   downloadContractReportsZip,
 } from '../../lib/contractPdf'
+import { useActiveUser } from '../../context/UserContext'
 
 export function ContractsPage() {
   const { company } = useSelectedCompany()
+  const { isAdmin } = useActiveUser()
   const [rows, setRows] = useState<Contract[]>([])
+  const [parties, setParties] = useState<Party[]>([])
+  const [selectedPartyIds, setSelectedPartyIds] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [downloadingCsv, setDownloadingCsv] = useState(false)
@@ -28,15 +33,33 @@ export function ContractsPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [sortAsc, setSortAsc] = useState(false)
+  const [includeHistorical, setIncludeHistorical] = useState(false)
+
+  useEffect(() => {
+    if (!company) {
+      setParties([])
+      return
+    }
+    mastersApi.parties
+      .list({ companyId: company.id })
+      .then((data) => setParties(data))
+      .catch(() => {})
+  }, [company])
 
   const reportParams = useCallback(() => {
     if (!company) return null
-    const params: Record<string, string> = { active_only: 'true', company_id: company.id }
+    const params: Record<string, string | string[] | undefined> = {
+      active_only: includeHistorical ? 'false' : 'true',
+      company_id: company.id,
+    }
     if (statusFilter) params.status = statusFilter
     if (dateFrom) params.date_from = dateFrom
     if (dateTo) params.date_to = dateTo
+    if (selectedPartyIds.length > 0) params.party_ids = selectedPartyIds
+    if (sortAsc) params.sort_asc = 'true'
     return params
-  }, [company, statusFilter, dateFrom, dateTo])
+  }, [company, statusFilter, dateFrom, dateTo, selectedPartyIds, sortAsc, includeHistorical])
 
   const load = useCallback(async () => {
     const params = reportParams()
@@ -135,6 +158,12 @@ export function ContractsPage() {
         }
         action={
           <div className="flex flex-wrap items-center gap-2">
+            <PartyMultiSelect
+              parties={parties}
+              selectedPartyIds={selectedPartyIds}
+              onChange={setSelectedPartyIds}
+              placeholder="Filter by Counterparty…"
+            />
             <label className="flex items-center gap-1.5 text-sm text-slate-600">
               <span className="whitespace-nowrap">From</span>
               <DateInputDmy value={dateFrom} onChange={setDateFrom} />
@@ -148,6 +177,24 @@ export function ContractsPage() {
                 Clear dates
               </Button>
             )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSortAsc(!sortAsc)}
+              title={sortAsc ? 'Sorted: Oldest first (Chronological)' : 'Sorted: Newest first'}
+            >
+              <ArrowUpDown size={14} className="mr-1" />
+              {sortAsc ? 'Oldest' : 'Newest'}
+            </Button>
+            <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={includeHistorical}
+                onChange={(e) => setIncludeHistorical(e.target.checked)}
+                className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+              />
+              <span className="whitespace-nowrap">Include Inactive</span>
+            </label>
             <select
               className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
               value={statusFilter}
@@ -158,8 +205,8 @@ export function ContractsPage() {
               <option value="CLOSED">Closed</option>
               <option value="CANCELLED">Cancelled</option>
             </select>
-            <Button variant="secondary" size="sm" onClick={load}>
-              <RefreshCw size={16} />
+            <Button variant="secondary" size="sm" onClick={load} disabled={loading} title="Reload contracts">
+              <RefreshCw size={16} className={loading ? 'animate-spin text-brand-600' : ''} />
             </Button>
             <Button
               variant="secondary"
@@ -181,16 +228,18 @@ export function ContractsPage() {
               <FileArchive size={16} />
               {downloadingZip ? zipProgress || 'ZIP…' : 'All Reports'}
             </Button>
-            {company ? (
-              <Link to="/contracts/new">
-                <Button size="sm">
+            {isAdmin && (
+              company ? (
+                <Link to="/contracts/new">
+                  <Button size="sm">
+                    <Plus size={16} /> New Contract
+                  </Button>
+                </Link>
+              ) : (
+                <Button size="sm" disabled>
                   <Plus size={16} /> New Contract
                 </Button>
-              </Link>
-            ) : (
-              <Button size="sm" disabled>
-                <Plus size={16} /> New Contract
-              </Button>
+              )
             )}
           </div>
         }
@@ -205,7 +254,15 @@ export function ContractsPage() {
         ) : (
           <DataTable
             columns={[
-              { key: 'contract_no', label: 'Contract #' },
+              {
+                key: 'contract_no',
+                label: 'Contract #',
+                render: (r) => (
+                  <span className="font-medium text-slate-900">
+                    #{String(r.contract_no)}
+                  </span>
+                ),
+              },
               {
                 key: 'contract_date',
                 label: 'Date',
@@ -257,6 +314,13 @@ export function ContractsPage() {
                         <Pencil size={16} />
                       </Link>
                     )}
+                    <Link
+                      to={`/financial-management?contractId=${r.id}`}
+                      className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-emerald-600"
+                      title="Financial Management & Ledger"
+                    >
+                      <Wallet size={16} />
+                    </Link>
                     <Link
                       to={`/contracts/${r.id}`}
                       className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600"

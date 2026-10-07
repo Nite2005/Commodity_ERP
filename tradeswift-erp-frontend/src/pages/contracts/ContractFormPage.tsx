@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { useNavigate, Link, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { mastersApi, contractsApi, ApiClientError } from '../../api/client'
-import type { Broker, Commodity, Party, PaymentTerm, QtyUnit, Tax } from '../../types'
+import type { Broker, Commodity, Party, PaymentTerm, QtyUnit, RateType, Tax } from '../../types'
 import { useSelectedCompany } from '../../context/SelectedCompanyContext'
+import { useActiveUser } from '../../context/UserContext'
 import { Card, CardBody, CardHeader } from '../../components/Card'
 import { Button } from '../../components/Button'
 import { FormField, inputClass, Alert } from '../../components/Modal'
@@ -28,7 +29,10 @@ const emptyForm = () => ({
   despatch_from: today(),
   despatch_to: today(),
   broker_id: '',
+  broker_rate: '0',
+  broker_rate_type: 'FIXED' as RateType,
   tax_id: '',
+  notes: '',
 })
 
 export function ContractFormPage() {
@@ -36,6 +40,7 @@ export function ContractFormPage() {
   const isEdit = Boolean(id)
   const navigate = useNavigate()
   const { company } = useSelectedCompany()
+  const { isAdmin } = useActiveUser()
   const [parties, setParties] = useState<Party[]>([])
   const [commodities, setCommodities] = useState<Commodity[]>([])
   const [taxes, setTaxes] = useState<Tax[]>([])
@@ -114,7 +119,10 @@ export function ContractFormPage() {
           despatch_from: c.despatch_from,
           despatch_to: c.despatch_to,
           broker_id: c.broker_id,
+          broker_rate: String(c.broker_rate ?? 0),
+          broker_rate_type: (c.broker_rate_type ?? 'FIXED') as RateType,
           tax_id: c.tax_id,
+          notes: c.notes ?? '',
         })
       } catch (e) {
         if (!cancelled) {
@@ -147,6 +155,7 @@ export function ContractFormPage() {
       is_nominee: false,
       commodity_id: form.commodity_id,
       quality_allowance: null,
+      notes: form.notes?.trim() || null,
       packing: 'NA',
       qty_low: Number(form.qty_low),
       qty_high: Number(form.qty_high),
@@ -159,7 +168,8 @@ export function ContractFormPage() {
       despatch_from: form.despatch_from,
       despatch_to: form.despatch_to,
       broker_id: form.broker_id,
-      broker_rate: 0,
+      broker_rate: Number(form.broker_rate || 0),
+      broker_rate_type: form.broker_rate_type,
     }
   }
 
@@ -171,6 +181,9 @@ export function ContractFormPage() {
       const payload = buildPayload()
       if (isEdit && id) {
         await contractsApi.update(id, payload)
+        if (!isAdmin) {
+          alert('Contract change request submitted! Since you are signed in as an Employee, changes are not updated immediately and have been routed to the Governance → Approvals section for Administrator approval.')
+        }
         navigate(`/contracts/${id}`)
       } else {
         const res = await contractsApi.create(payload)
@@ -361,9 +374,9 @@ export function ContractFormPage() {
 
             <section>
               <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-400">
-                Broker
+                Broker & Brokerage
               </h3>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-3">
                 <FormField label="Broker" required>
                   <select className={inputClass} value={form.broker_id} onChange={(e) => set('broker_id', e.target.value)} required>
                     <option value="">Select broker…</option>
@@ -371,6 +384,58 @@ export function ContractFormPage() {
                       <option key={b.id} value={b.id}>{b.broker_name}</option>
                     ))}
                   </select>
+                </FormField>
+                <FormField label="Brokerage Type" required>
+                  <select
+                    className={inputClass}
+                    value={form.broker_rate_type}
+                    onChange={(e) => set('broker_rate_type', e.target.value)}
+                  >
+                    <option value="FIXED">Fixed (Per {form.qty_unit || 'MT'})</option>
+                    <option value="PERCENTAGE">Percentage (% of Transaction Value)</option>
+                  </select>
+                </FormField>
+                <FormField
+                  label={
+                    form.broker_rate_type === 'PERCENTAGE'
+                      ? 'Brokerage Rate (%)'
+                      : `Brokerage Rate (₹ / ${form.qty_unit || 'MT'})`
+                  }
+                  hint={
+                    form.broker_rate_type === 'PERCENTAGE'
+                      ? 'Calculated on total transaction value (Quantity × Rate)'
+                      : `Calculated per ${form.qty_unit || 'MT'} quantity`
+                  }
+                >
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max={form.broker_rate_type === 'PERCENTAGE' ? 100 : undefined}
+                    className={inputClass}
+                    value={form.broker_rate}
+                    onChange={(e) => set('broker_rate', e.target.value)}
+                  />
+                </FormField>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-400">
+                Transaction Notes & Operational Remarks
+              </h3>
+              <div className="grid gap-4">
+                <FormField
+                  label="Deal Notes / Operational Instructions"
+                  hint="Specify operational remarks at deal (sauda) finalization, such as exact factory name for loading or critical dispatch instructions."
+                >
+                  <textarea
+                    rows={3}
+                    className={inputClass}
+                    value={form.notes}
+                    onChange={(e) => set('notes', e.target.value)}
+                    placeholder="e.g. Loading strictly from Factory Unit 2 (Tonk Road). Counterparty requires delivery by 15th."
+                  />
                 </FormField>
               </div>
             </section>

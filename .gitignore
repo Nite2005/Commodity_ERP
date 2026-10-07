@@ -3,4 +3,22 @@ canvases
 mcps
 terminals
 .env
-.venv
+.venv/
+venv/
+
+# Python cache & artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.db
+*.sqlite3
+
+# Node / Frontend build artifacts
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# OS files
+.DS_Store
+Thumbs.db

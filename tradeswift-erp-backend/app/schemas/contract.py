@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.models.enums import ContractStatus, ContractType, Currency, QtyUnit
+from app.models.enums import ContractStatus, ContractType, Currency, QtyUnit, RateType
 
 
 class ORMModel(BaseModel):
@@ -27,6 +27,7 @@ class ContractCreate(BaseModel):
     is_nominee: bool = False
     commodity_id: UUID
     quality_allowance: str | None = Field(default=None, max_length=1000)
+    notes: str | None = None
     packing: str = Field(max_length=100)
     qty_low: Decimal = Field(gt=0)
     qty_high: Decimal = Field(gt=0)
@@ -40,6 +41,7 @@ class ContractCreate(BaseModel):
     despatch_to: date
     broker_id: UUID
     broker_rate: Decimal = Field(ge=0)
+    broker_rate_type: RateType = RateType.FIXED
     print_options: PrintOptions | None = None
 
     @model_validator(mode="after")
@@ -63,6 +65,7 @@ class ContractUpdate(BaseModel):
     is_nominee: bool | None = None
     commodity_id: UUID | None = None
     quality_allowance: str | None = Field(default=None, max_length=1000)
+    notes: str | None = None
     packing: str | None = Field(default=None, max_length=100)
     qty_low: Decimal | None = Field(default=None, gt=0)
     qty_high: Decimal | None = Field(default=None, gt=0)
@@ -76,6 +79,7 @@ class ContractUpdate(BaseModel):
     despatch_to: date | None = None
     broker_id: UUID | None = None
     broker_rate: Decimal | None = Field(default=None, ge=0)
+    broker_rate_type: RateType | None = None
     print_options: PrintOptions | None = None
 
 
@@ -94,6 +98,7 @@ class ContractResponse(ORMModel):
     is_nominee: bool
     commodity_id: UUID
     quality_allowance: str | None
+    notes: str | None = None
     packing: str
     qty_low: Decimal
     qty_high: Decimal
@@ -107,6 +112,7 @@ class ContractResponse(ORMModel):
     despatch_to: date
     broker_id: UUID
     broker_rate: Decimal
+    broker_rate_type: RateType = RateType.FIXED
     final_qty: Decimal | None
     tolerance_percent: Decimal
     fulfilled_qty: Decimal

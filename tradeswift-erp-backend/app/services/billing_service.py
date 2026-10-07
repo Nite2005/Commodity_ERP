@@ -5,12 +5,12 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload
 
 from app.models import Bill, BillLineItem, Contract, Despatch, Party, Tax
-from app.models.enums import BillingStatus, ContractStatus
+from app.models.enums import BillingStatus, ContractStatus, RateType
 from app.schemas.bill import BillCreate
 from app.services.contract_service import ContractService
 from app.services.sequence_service import SequenceService
 from app.services.tax_engine import TaxEngine
-from app.utils.ids import as_db_id, db_get
+from app.utils.ids import as_db_id, db_get, uuid_variants
 
 
 class BillingService:
@@ -23,11 +23,11 @@ class BillingService:
         date_to: date | None = None,
         company_id: str | None = None,
     ) -> list[dict]:
-        party_key = as_db_id(party_id)
-        party = db_get(db, Party, party_key)
+        party = db_get(db, Party, party_id)
         if not party or not party.is_active:
             raise HTTPException(status_code=400, detail="Party not found or inactive.")
 
+        party_vars = uuid_variants(party_id)
         q = (
             db.query(Contract)
             .options(
@@ -38,11 +38,11 @@ class BillingService:
             .filter(
                 Contract.is_active.is_(True),
                 Contract.status != ContractStatus.CANCELLED,
-                (Contract.seller_id == party_key) | (Contract.buyer_id == party_key),
+                (Contract.seller_id.in_(party_vars)) | (Contract.buyer_id.in_(party_vars)),
             )
         )
         if company_id:
-            q = q.filter(Contract.company_id == as_db_id(company_id))
+            q = q.filter(Contract.company_id.in_(uuid_variants(company_id)))
         if date_from:
             q = q.filter(Contract.contract_date >= date_from)
         if date_to:
@@ -89,14 +89,17 @@ class BillingService:
         if not tax or not tax.is_active:
             raise HTTPException(status_code=400, detail="Tax not found or inactive.")
 
-        party_key = as_db_id(payload.party_id)
-        contract_ids = [as_db_id(line.contract_id) for line in payload.lines]
-        if len(set(contract_ids)) != len(contract_ids):
+        party_vars = set(uuid_variants(payload.party_id))
+        all_contract_vars: list[str] = []
+        for line in payload.lines:
+            all_contract_vars.extend(uuid_variants(line.contract_id))
+
+        if len(payload.lines) != len({line.contract_id for line in payload.lines}):
             raise HTTPException(status_code=400, detail="Duplicate contracts in bill lines.")
 
         contracts = (
             db.query(Contract)
-            .filter(Contract.id.in_(contract_ids))
+            .filter(Contract.id.in_(all_contract_vars))
             .options(
                 joinedload(Contract.seller),
                 joinedload(Contract.buyer),
@@ -105,8 +108,12 @@ class BillingService:
             .with_for_update()
             .all()
         )
-        by_id = {c.id: c for c in contracts}
-        if len(by_id) != len(contract_ids):
+        by_id: dict[str, Contract] = {}
+        for c in contracts:
+            for v in uuid_variants(c.id):
+                by_id[v] = c
+
+        if len(contracts) < len(payload.lines):
             raise HTTPException(status_code=404, detail="One or more contracts not found.")
 
         line_data: list[dict] = []
@@ -115,7 +122,9 @@ class BillingService:
         first_contract: Contract | None = None
 
         for line in payload.lines:
-            contract = by_id[as_db_id(line.contract_id)]
+            contract = by_id.get(str(line.contract_id)) or by_id.get(as_db_id(line.contract_id))
+            if not contract:
+                raise HTTPException(status_code=404, detail="One or more contracts not found.")
             if first_contract is None:
                 first_contract = contract
 
@@ -127,7 +136,8 @@ class BillingService:
                 raise HTTPException(
                     status_code=400, detail=f"Contract {contract.contract_no} is cancelled."
                 )
-            if party_key not in (contract.seller_id, contract.buyer_id):
+            contract_party_vars = set(uuid_variants(contract.seller_id) + uuid_variants(contract.buyer_id))
+            if not party_vars.intersection(contract_party_vars):
                 raise HTTPException(
                     status_code=400,
                     detail=f"Contract {contract.contract_no} does not belong to the selected party.",
@@ -178,7 +188,15 @@ class BillingService:
             rate = Decimal(str(contract.rate))
             line_base = qty * rate
             base_amount += line_base
-            brokerage_amount += qty * Decimal(str(contract.broker_rate))
+            broker_rate = Decimal(str(contract.broker_rate or 0))
+            broker_rate_type = getattr(contract, "broker_rate_type", RateType.FIXED) or RateType.FIXED
+            if broker_rate_type == RateType.PERCENTAGE:
+                # Percentage brokerage calculated on basis of transaction value: (line_base * broker_rate) / 100
+                line_brokerage = (line_base * broker_rate) / Decimal("100")
+            else:
+                # Fixed brokerage calculated on basis of quantity unit: qty * broker_rate
+                line_brokerage = qty * broker_rate
+            brokerage_amount += line_brokerage
             line_data.append(
                 {
                     "contract": contract,
@@ -202,8 +220,8 @@ class BillingService:
         bill = Bill(
             bill_no=SequenceService.next_code(db, "BILL"),
             bill_date=payload.bill_date,
-            party_id=party_key,
-            tax_id=as_db_id(payload.tax_id),
+            party_id=str(party.id),
+            tax_id=str(tax.id),
             from_date=payload.from_date,
             to_date=payload.to_date,
             base_amount=base_amount,
@@ -211,7 +229,7 @@ class BillingService:
             cgst_amount=tax_amounts["cgst_amount"],
             sgst_amount=tax_amounts["sgst_amount"],
             gross_amount=gross_amount,
-            brokerage_amount=brokerage_amount,
+            brokerage_amount=brokerage_amount.quantize(Decimal("0.01")),
             supply_type=supply_type,
         )
         db.add(bill)
@@ -248,12 +266,29 @@ class BillingService:
             contract = li.contract
             if contract and first_contract is None:
                 first_contract = contract
+
+            broker_rate = Decimal(str(contract.broker_rate or 0)) if contract else Decimal("0")
+            broker_rate_type = getattr(contract, "broker_rate_type", RateType.FIXED) if contract else RateType.FIXED
+            if broker_rate_type == RateType.PERCENTAGE:
+                line_brokerage = (Decimal(str(li.line_base_amount or 0)) * broker_rate) / Decimal("100")
+            else:
+                line_brokerage = Decimal(str(li.quantity or 0)) * broker_rate
+
             lines.append(
                 {
                     **{c.name: getattr(li, c.name) for c in li.__table__.columns},
                     "despatch_no": despatch.despatch_no if despatch else None,
                     "despatch_date": despatch.despatch_date if despatch else None,
                     "contract_no": contract.contract_no if contract else None,
+                    "contract_date": contract.contract_date if contract else None,
+                    "seller_name": contract.seller.name if contract and contract.seller else None,
+                    "buyer_name": contract.buyer.name if contract and contract.buyer else None,
+                    "seller_id": str(contract.seller_id) if contract else None,
+                    "buyer_id": str(contract.buyer_id) if contract else None,
+                    "bags": despatch.bags if despatch else None,
+                    "broker_rate": broker_rate,
+                    "broker_rate_type": broker_rate_type.value if hasattr(broker_rate_type, "value") else str(broker_rate_type),
+                    "line_brokerage_amount": line_brokerage.quantize(Decimal("0.01")),
                     "commodity_short_name": (
                         contract.commodity.comm_short_name
                         if contract and contract.commodity
@@ -270,6 +305,7 @@ class BillingService:
 
         party = bill.party
         tax = bill.tax
+        company = first_contract.company if first_contract and first_contract.company else None
         return {
             **{c.name: getattr(bill, c.name) for c in bill.__table__.columns},
             "party_name": party.name if party else None,
@@ -287,5 +323,16 @@ class BillingService:
             "buyer_name": first_contract.buyer.name if first_contract and first_contract.buyer else None,
             "seller_state": first_contract.seller.state if first_contract and first_contract.seller else None,
             "buyer_state": first_contract.buyer.state if first_contract and first_contract.buyer else None,
+            "company_name": getattr(company, "name", None) if company else None,
+            "company_address": getattr(company, "address", None) if company else None,
+            "company_city": getattr(company, "city", None) if company else None,
+            "company_state": getattr(company, "state", None) if company else None,
+            "company_pincode": getattr(company, "pincode", None) if company else None,
+            "company_gstin": getattr(company, "gst_tin", None) if company else None,
+            "company_pan": getattr(company, "pan_no", None) if company else None,
+            "company_phone": getattr(company, "phone", None) or getattr(company, "mobile", None) if company else None,
+            "company_bank_name": getattr(company, "bank_name", None) if company else None,
+            "company_account_no": getattr(company, "account_no", None) if company else None,
+            "company_ifsc_code": getattr(company, "ifsc_code", None) if company else None,
             "line_items": lines,
         }

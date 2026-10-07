@@ -49,3 +49,35 @@ class SalesRegisterRow(BaseModel):
     brokerage_amount: Decimal
     supply_type: SupplyType
     tax_name: str | None = None
+
+
+class ContractLedgerItem(BaseModel):
+    contract_id: UUID
+    contract_no: str
+    contract_date: date
+    role: str
+    commodity_name: str | None = None
+    status: ContractStatus
+    quantity: Decimal
+    qty_unit: QtyUnit
+    rate: Decimal
+    total_value: Decimal
+    pending_payment: Decimal
+    adjustments: Decimal
+    net_due: Decimal
+
+
+class PartyLedgerResponse(BaseModel):
+    party_id: UUID
+    party_name: str
+    party_code: str
+    credit_limit: Decimal
+    total_outstanding: Decimal
+    total_contract_value: Decimal
+    total_billed_amount: Decimal
+    total_adjustments: Decimal
+    is_overdue: bool
+    status_label: str
+    contracts_count: int
+    contracts: list[ContractLedgerItem]
+

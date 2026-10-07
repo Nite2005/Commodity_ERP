@@ -116,6 +116,7 @@ class PartyCreate(BaseModel):
     email: str | None = Field(default=None, max_length=100)
     contact_name: str | None = Field(default=None, max_length=100)
     designation: str | None = Field(default=None, max_length=100)
+    credit_limit: Decimal | None = Field(default=Decimal("5000000.00"), ge=0)
 
     @field_validator("gst_tin")
     @classmethod
@@ -155,6 +156,7 @@ class PartyUpdate(BaseModel):
     email: str | None = None
     contact_name: str | None = None
     designation: str | None = None
+    credit_limit: Decimal | None = Field(default=None, ge=0)
     is_active: bool | None = None
 
 
@@ -174,11 +176,14 @@ class PartyResponse(ORMModel):
     account_no: str | None
     bank_name: str | None
     ifsc_code: str | None
+    cancelled_cheque_filename: str | None = None
     phone: str | None
     mobile: str | None
     email: str | None
     contact_name: str | None
     designation: str | None
+    credit_limit: Decimal | None = None
+    has_pending_approval: bool = False
     is_active: bool
     created_at: datetime
 
@@ -306,12 +311,15 @@ class RateMasterCreate(BaseModel):
     rate: Decimal = Field(gt=0)
     unit: QtyUnit
     currency: Currency = Currency.INR
+    brokerage_type: RateType = RateType.FIXED
     brokerage: Decimal = Field(ge=0, default=0)
 
     @model_validator(mode="after")
     def validate_rate_by_type(self):
         if self.rate_type == RateType.PERCENTAGE and self.rate > Decimal("100"):
             raise ValueError("Percentage rate cannot exceed 100.")
+        if self.brokerage_type == RateType.PERCENTAGE and self.brokerage > Decimal("100"):
+            raise ValueError("Percentage brokerage cannot exceed 100.")
         return self
 
 
@@ -323,6 +331,7 @@ class RateMasterUpdate(BaseModel):
     rate: Decimal | None = Field(default=None, gt=0)
     unit: QtyUnit | None = None
     currency: Currency | None = None
+    brokerage_type: RateType | None = None
     brokerage: Decimal | None = Field(default=None, ge=0)
     is_active: bool | None = None
 
@@ -334,6 +343,12 @@ class RateMasterUpdate(BaseModel):
             and self.rate > Decimal("100")
         ):
             raise ValueError("Percentage rate cannot exceed 100.")
+        if (
+            self.brokerage_type == RateType.PERCENTAGE
+            and self.brokerage is not None
+            and self.brokerage > Decimal("100")
+        ):
+            raise ValueError("Percentage brokerage cannot exceed 100.")
         return self
 
 
@@ -347,6 +362,8 @@ class RateMasterResponse(ORMModel):
     rate: Decimal
     unit: QtyUnit
     currency: Currency
+    brokerage_type: RateType = RateType.FIXED
     brokerage: Decimal
+    has_pending_approval: bool = False
     is_active: bool
     created_at: datetime

@@ -12,9 +12,11 @@ import { Alert } from '../../components/Modal'
 import { DateInputDmy } from '../../components/DateInputDmy'
 import { formatDateDmy } from '../../lib/dates'
 import { downloadInvoicePdf, downloadInvoicesZip } from '../../lib/invoicePdf'
+import { useActiveUser } from '../../context/UserContext'
 
 export function BillsPage() {
   const { company } = useSelectedCompany()
+  const { isAdmin } = useActiveUser()
   const [rows, setRows] = useState<Bill[]>([])
   const [parties, setParties] = useState<Party[]>([])
   const [loading, setLoading] = useState(true)
@@ -186,8 +188,8 @@ export function BillsPage() {
                 </option>
               ))}
             </select>
-            <Button variant="secondary" size="sm" onClick={load}>
-              <RefreshCw size={16} />
+            <Button variant="secondary" size="sm" onClick={load} disabled={loading} title="Reload bills">
+              <RefreshCw size={16} className={loading ? 'animate-spin text-brand-600' : ''} />
             </Button>
             <Button
               variant="secondary"
@@ -209,11 +211,13 @@ export function BillsPage() {
               <FileArchive size={16} />
               {downloadingZip ? zipProgress || 'ZIP…' : 'All Invoices'}
             </Button>
-            <Link to="/billing/generate">
-              <Button size="sm">
-                <Plus size={16} /> Generate Bill
-              </Button>
-            </Link>
+            {isAdmin && (
+              <Link to="/billing/generate">
+                <Button size="sm">
+                  <Plus size={16} /> Generate Bill
+                </Button>
+              </Link>
+            )}
           </div>
         }
       />

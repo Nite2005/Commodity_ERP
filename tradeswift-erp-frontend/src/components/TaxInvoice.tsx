@@ -1,223 +1,431 @@
-import type { BillDetail } from '../types'
-import { TRADESWIFT_COMPANY, formatDate, formatInr } from '../lib/invoice'
+import type { BillDetail, BillLineItem } from '../types'
+import {
+  TRADESWIFT_COMPANY,
+  amountInWords,
+  formatDateDmyDot,
+  formatNum,
+} from '../lib/invoice'
 
 interface TaxInvoiceProps {
   bill: BillDetail
 }
 
 export function TaxInvoice({ bill }: TaxInvoiceProps) {
-  const isIntra = bill.supply_type === 'INTRA_STATE'
-  const supplyLabel = isIntra ? 'Intra-State Supply' : 'Inter-State Supply'
-  const taxLabel = isIntra
-    ? `CGST @ ${bill.cgst_percent}% + SGST @ ${bill.sgst_percent}%`
-    : `IGST @ ${bill.igst_percent}%`
+  const pan = bill.company_pan || TRADESWIFT_COMPANY.pan
+  const mobile = bill.company_phone || TRADESWIFT_COMPANY.phone
+  const gstin = bill.company_gstin || TRADESWIFT_COMPANY.gstin
+  const companyName = bill.company_name || TRADESWIFT_COMPANY.name
+  const companyAddress =
+    [bill.company_address, bill.company_city, bill.company_state]
+      .filter(Boolean)
+      .join(', ') ||
+    `${TRADESWIFT_COMPANY.address}, ${TRADESWIFT_COMPANY.city} ${TRADESWIFT_COMPANY.state}`
+  const devotionalHeading = TRADESWIFT_COMPANY.devotional_heading || 'Jai shri Shyam'
+
+  const bankName = bill.company_bank_name || TRADESWIFT_COMPANY.bank_name
+  const accountNo = bill.company_account_no || TRADESWIFT_COMPANY.account_no
+  const ifscCode = bill.company_ifsc_code || TRADESWIFT_COMPANY.ifsc_code
+
+  const partyName = bill.party_name || 'Party Name'
+  const partyGstin = bill.party_gst_tin && bill.party_gst_tin.trim() !== '-' ? bill.party_gst_tin : '—'
+  const partyAddress =
+    [bill.party_address, bill.party_city].filter(Boolean).join(', ') || '—'
+  const partyState = bill.party_state || '—'
+  const partyStateCode =
+    partyGstin && partyGstin !== '—' && partyGstin.length >= 2
+      ? partyGstin.slice(0, 2)
+      : '09'
+
+  // Segregate lines by seller / buyer counterparty roles dynamically
+  const sellerLines: BillLineItem[] = []
+  const buyerLines: BillLineItem[] = []
+
+  const normPartyId = (bill.party_id || '').replace(/-/g, '').toLowerCase()
+  const partyNameLower = (bill.party_name || '').trim().toLowerCase()
+
+  bill.line_items.forEach((item) => {
+    const normSellerId = (item.seller_id || '').replace(/-/g, '').toLowerCase()
+    const normBuyerId = (item.buyer_id || '').replace(/-/g, '').toLowerCase()
+    const sellerNameLower = (item.seller_name || '').trim().toLowerCase()
+    const buyerNameLower = (item.buyer_name || '').trim().toLowerCase()
+
+    const isSeller =
+      (normPartyId && normSellerId === normPartyId) ||
+      (partyNameLower && sellerNameLower === partyNameLower)
+    const isBuyer =
+      (normPartyId && normBuyerId === normPartyId) ||
+      (partyNameLower && buyerNameLower === partyNameLower)
+
+    if (isSeller) {
+      sellerLines.push(item)
+    } else if (isBuyer) {
+      buyerLines.push(item)
+    } else {
+      // If ambiguous, default to seller
+      sellerLines.push(item)
+    }
+  })
+
+  const getLineBrokerage = (item: BillLineItem): number => {
+    if (item.line_brokerage_amount != null && item.line_brokerage_amount > 0) {
+      return Number(item.line_brokerage_amount)
+    }
+    const rate = Number(item.broker_rate || 0)
+    if (item.broker_rate_type === 'PERCENTAGE') {
+      return (Number(item.line_base_amount || 0) * rate) / 100
+    }
+    return Number(item.quantity || 0) * (rate > 0 ? rate : 50)
+  }
+
+  const calcSubtotal = (items: BillLineItem[]) => {
+    const bags = items.reduce((sum, i) => sum + (Number(i.bags) || 0), 0)
+    const weight = items.reduce((sum, i) => sum + Number(i.quantity || 0), 0)
+    const brokerage = items.reduce((sum, i) => sum + getLineBrokerage(i), 0)
+    return { bags, weight, brokerage }
+  }
+
+  const sellerSubtotal = calcSubtotal(sellerLines)
+  const buyerSubtotal = calcSubtotal(buyerLines)
+
+  const totalBags = sellerSubtotal.bags + buyerSubtotal.bags
+  const totalWeight = sellerSubtotal.weight + buyerSubtotal.weight
+  const totalBrokerage =
+    sellerSubtotal.brokerage + buyerSubtotal.brokerage > 0
+      ? sellerSubtotal.brokerage + buyerSubtotal.brokerage
+      : Number(bill.brokerage_amount || bill.base_amount || 0)
+
+  // Determine inter-state (IGST) vs intra-state (CGST+SGST)
+  const companyState = bill.company_state || TRADESWIFT_COMPANY.state
+  const isInterState =
+    bill.supply_type === 'INTER_STATE' ||
+    (bill.igst_percent != null && Number(bill.igst_percent) > 0) ||
+    partyState.toLowerCase() !== companyState.toLowerCase()
+
+  const igstRate = Number(bill.igst_percent ?? (isInterState ? 18 : 0))
+  const cgstRate = Number(bill.cgst_percent ?? (!isInterState ? 9 : 0))
+  const sgstRate = Number(bill.sgst_percent ?? (!isInterState ? 9 : 0))
+
+  let igstAmount = 0
+  let cgstAmount = 0
+  let sgstAmount = 0
+
+  if (isInterState && igstRate > 0) {
+    igstAmount = Math.round(totalBrokerage * igstRate) / 100
+  } else if (!isInterState) {
+    cgstAmount = Math.round(totalBrokerage * (cgstRate || 9)) / 100
+    sgstAmount = Math.round(totalBrokerage * (sgstRate || 9)) / 100
+  }
+
+  const taxTotal = igstAmount + cgstAmount + sgstAmount
+  const netAmount = Math.round((totalBrokerage + taxTotal) * 100) / 100
+
+  const renderSectionRows = (items: BillLineItem[], isSellerSection: boolean) => {
+    return items.map((line, idx) => {
+      const counterparty = isSellerSection
+        ? line.buyer_name || '—'
+        : line.seller_name || '—'
+      const commodity = line.commodity_short_name || line.commodity_name || '—'
+      const weightUnit = line.qty_unit || 'M.T'
+      const saudaRate = Number(line.rate || 0)
+      const brokerRate = Number(line.broker_rate ?? 50)
+      const isPct = line.broker_rate_type === 'PERCENTAGE'
+      const lineBrokerage = getLineBrokerage(line)
+
+      return (
+        <tr key={line.id || idx}>
+          <td className="py-0.5 px-1 whitespace-nowrap">
+            {formatDateDmyDot(line.despatch_date || line.contract_date || bill.bill_date)}
+          </td>
+          <td className="py-0.5 px-1 whitespace-nowrap font-medium">
+            {line.contract_no ? `${line.contract_no}` : '—'}
+          </td>
+          <td className="py-0.5 px-1 uppercase font-medium truncate max-w-[210px]" title={counterparty}>
+            {counterparty}
+          </td>
+          <td className="py-0.5 px-1 whitespace-nowrap">{commodity}</td>
+          <td className="py-0.5 px-1 text-right whitespace-nowrap">{line.bags ?? '0'}</td>
+          <td className="py-0.5 px-1 text-right whitespace-nowrap font-medium">
+            {formatNum(line.quantity, 3)} {weightUnit}
+          </td>
+          <td className="py-0.5 px-1 text-right whitespace-nowrap">
+            {formatNum(saudaRate, 2)}/Qtl
+          </td>
+          <td className="py-0.5 px-1 text-right whitespace-nowrap font-medium">
+            {isPct ? `${formatNum(brokerRate, 2)}%` : `${formatNum(brokerRate, 2)}/${weightUnit}`}
+          </td>
+          <td className="py-0.5 px-1 text-right whitespace-nowrap font-semibold">
+            {formatNum(lineBrokerage, 2)}
+          </td>
+        </tr>
+      )
+    })
+  }
 
   return (
     <article
       id="tax-invoice"
-      className="mx-auto max-w-[210mm] bg-white text-slate-900 shadow-lg ring-1 ring-slate-200 print:shadow-none print:ring-0"
+      className="mx-auto max-w-[210mm] bg-white text-black p-8 font-mono text-[11px] leading-tight shadow-sm ring-1 ring-slate-200 print:shadow-none print:ring-0 print:p-2"
+      style={{ fontFamily: "'Courier New', Courier, monospace" }}
     >
-      {/* Header band */}
-      <header className="border-b-4 border-brand-600 bg-gradient-to-r from-slate-900 to-slate-800 px-8 py-6 text-white print:bg-slate-900 print:text-white">
-        <div className="flex flex-wrap items-start justify-between gap-6">
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-300">
-              {TRADESWIFT_COMPANY.tagline}
-            </div>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight">{TRADESWIFT_COMPANY.name}</h1>
-            <p className="mt-2 max-w-md text-sm leading-relaxed text-slate-300">
-              {TRADESWIFT_COMPANY.address}
-              <br />
-              {TRADESWIFT_COMPANY.city}, {TRADESWIFT_COMPANY.state} – {TRADESWIFT_COMPANY.pincode}
-              <br />
-              GSTIN: <span className="font-mono text-white">{TRADESWIFT_COMPANY.gstin}</span>
-            </p>
-          </div>
-          <div className="text-right">
-            <div className="inline-block rounded-lg bg-brand-600 px-4 py-2 text-sm font-bold uppercase tracking-widest">
-              Tax Invoice
-            </div>
-            <dl className="mt-4 space-y-1 text-sm">
-              <div className="flex justify-end gap-3">
-                <dt className="text-slate-400">Invoice No.</dt>
-                <dd className="font-mono font-semibold">{bill.bill_no}</dd>
-              </div>
-              <div className="flex justify-end gap-3">
-                <dt className="text-slate-400">Invoice Date</dt>
-                <dd className="font-semibold">{formatDate(bill.bill_date)}</dd>
-              </div>
-              <div className="flex justify-end gap-3">
-                <dt className="text-slate-400">Period</dt>
-                <dd>
-                  {formatDate(bill.from_date)} – {formatDate(bill.to_date)}
-                </dd>
-              </div>
-            </dl>
-          </div>
+      {/* 1. TOP HEADER BAND */}
+      <div className="pb-1 mb-1">
+        <div className="flex items-center justify-between text-[11px] font-semibold">
+          <div>PAN : {pan}</div>
+          <div>{devotionalHeading}</div>
+          <div>Mobile: {mobile}</div>
         </div>
-      </header>
-
-      <div className="px-8 py-6">
-        {/* Bill To + Supply info */}
-        <div className="grid gap-6 border-b border-slate-200 pb-6 sm:grid-cols-2">
-          <section>
-            <h2 className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-              Bill To
-            </h2>
-            <p className="text-lg font-semibold text-slate-900">{bill.party_name}</p>
-            {bill.party_code && (
-              <p className="text-xs text-slate-500">Code: {bill.party_code}</p>
-            )}
-            <address className="mt-2 not-italic text-sm leading-relaxed text-slate-600">
-              {bill.party_address}
-              <br />
-              {bill.party_city}, {bill.party_state} – {bill.party_pincode}
-            </address>
-            {bill.party_gst_tin && (
-              <p className="mt-2 text-sm">
-                <span className="text-slate-500">GSTIN:</span>{' '}
-                <span className="font-mono font-medium">{bill.party_gst_tin}</span>
-              </p>
-            )}
-          </section>
-
-          <section className="sm:text-right">
-            <h2 className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-              Transaction Details
-            </h2>
-            <dl className="space-y-1.5 text-sm">
-              <div className="flex justify-between sm:justify-end sm:gap-8">
-                <dt className="text-slate-500">Supply Type</dt>
-                <dd className="font-medium">{supplyLabel}</dd>
-              </div>
-              <div className="flex justify-between sm:justify-end sm:gap-8">
-                <dt className="text-slate-500">Tax Schedule</dt>
-                <dd className="font-medium">{bill.tax_name}</dd>
-              </div>
-              {bill.seller_name && (
-                <div className="flex justify-between sm:justify-end sm:gap-8">
-                  <dt className="text-slate-500">Seller</dt>
-                  <dd>{bill.seller_name}</dd>
-                </div>
-              )}
-              {bill.buyer_name && (
-                <div className="flex justify-between sm:justify-end sm:gap-8">
-                  <dt className="text-slate-500">Buyer</dt>
-                  <dd>{bill.buyer_name}</dd>
-                </div>
-              )}
-              {bill.seller_state && bill.buyer_state && (
-                <div className="flex justify-between sm:justify-end sm:gap-8">
-                  <dt className="text-slate-500">Place of Supply</dt>
-                  <dd>
-                    {bill.buyer_state} ({bill.seller_state} → {bill.buyer_state})
-                  </dd>
-                </div>
-              )}
-            </dl>
-          </section>
+        <div className="text-[11px] font-semibold mt-0.5">
+          GSTIN: {gstin}
         </div>
 
-        {/* Line items */}
-        <div className="mt-6 overflow-x-auto">
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="border-b-2 border-slate-800 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                <th className="px-3 py-3">#</th>
-                <th className="px-3 py-3">Contract</th>
-                <th className="px-3 py-3">Despatch</th>
-                <th className="px-3 py-3">Date</th>
-                <th className="px-3 py-3">Description</th>
-                <th className="px-3 py-3 text-right">Qty</th>
-                <th className="px-3 py-3 text-right">Rate</th>
-                <th className="px-3 py-3 text-right">Taxable Value</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {bill.line_items.map((line, idx) => (
-                <tr key={line.id} className="hover:bg-slate-50/50">
-                  <td className="px-3 py-3 text-slate-500">{idx + 1}</td>
-                  <td className="px-3 py-3 font-mono text-xs">#{line.contract_no}</td>
-                  <td className="px-3 py-3 font-mono text-xs font-medium">
-                    {line.despatch_no || '—'}
-                  </td>
-                  <td className="px-3 py-3 whitespace-nowrap">
-                    {line.despatch_date ? formatDate(line.despatch_date) : '—'}
-                  </td>
-                  <td className="px-3 py-3">
-                    <div className="font-medium">{line.commodity_name ?? line.commodity_short_name}</div>
-                    {line.commodity_name && line.commodity_short_name && (
-                      <div className="text-xs text-slate-500">{line.commodity_short_name}</div>
-                    )}
-                  </td>
-                  <td className="px-3 py-3 text-right tabular-nums">
-                    {Number(line.quantity).toLocaleString('en-IN')}{' '}
-                    <span className="text-xs text-slate-500">{line.qty_unit}</span>
-                  </td>
-                  <td className="px-3 py-3 text-right tabular-nums">{formatInr(line.rate)}</td>
-                  <td className="px-3 py-3 text-right font-medium tabular-nums">
-                    {formatInr(line.line_base_amount)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Totals */}
-        <div className="mt-6 flex justify-end">
-          <div className="w-full max-w-sm space-y-2 border-t-2 border-slate-800 pt-4">
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-600">Taxable Value</span>
-              <span className="font-medium tabular-nums">{formatInr(bill.base_amount)}</span>
-            </div>
-            {Number(bill.cgst_amount) > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-600">CGST ({bill.cgst_percent}%)</span>
-                <span className="tabular-nums">{formatInr(bill.cgst_amount)}</span>
-              </div>
-            )}
-            {Number(bill.sgst_amount) > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-600">SGST ({bill.sgst_percent}%)</span>
-                <span className="tabular-nums">{formatInr(bill.sgst_amount)}</span>
-              </div>
-            )}
-            {Number(bill.igst_amount) > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-600">IGST ({bill.igst_percent}%)</span>
-                <span className="tabular-nums">{formatInr(bill.igst_amount)}</span>
-              </div>
-            )}
-            <div className="flex justify-between border-t border-slate-200 pt-3 text-base font-bold">
-              <span>Grand Total</span>
-              <span className="text-brand-700 tabular-nums">{formatInr(bill.gross_amount)}</span>
-            </div>
-            <p className="text-right text-[10px] text-slate-400">{taxLabel}</p>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <footer className="mt-10 border-t border-slate-200 pt-6">
-          <div className="grid gap-6 sm:grid-cols-2">
-            <div className="text-xs text-slate-500">
-              <p className="font-semibold uppercase tracking-wide text-slate-400">
-                Brokerage (for internal reference)
-              </p>
-              <p className="mt-1 tabular-nums">{formatInr(bill.brokerage_amount)}</p>
-            </div>
-            <div className="sm:text-right">
-              <p className="text-xs text-slate-400">For {TRADESWIFT_COMPANY.name}</p>
-              <div className="mt-8 border-t border-slate-300 pt-1 text-xs text-slate-500 sm:ml-auto sm:w-48">
-                Authorised Signatory
-              </div>
-            </div>
-          </div>
-          <p className="mt-6 text-center text-[10px] text-slate-400">
-            This is a computer-generated tax invoice · {TRADESWIFT_COMPANY.email} ·{' '}
-            {TRADESWIFT_COMPANY.phone}
+        {/* Firm / Company Name & Address */}
+        <div className="text-center mt-2">
+          <h1 className="text-xl font-bold tracking-wider text-black uppercase">
+            {companyName}
+          </h1>
+          <p className="text-[11px] text-black mt-0.5">
+            {companyAddress}
           </p>
-        </footer>
+          <div className="mt-2 text-sm font-bold tracking-widest uppercase">
+            GST  INVOICE
+          </div>
+        </div>
+      </div>
+
+      {/* 2. INVOICE META & COUNTERPARTY DETAILS */}
+      <div className="grid grid-cols-2 gap-4 pb-2 text-[11px] pt-1">
+        <div className="space-y-0.5">
+          <div className="flex">
+            <span className="w-20 font-bold">Bill No.</span>
+            <span>: <strong className="font-bold">{bill.bill_no}</strong></span>
+          </div>
+          <div className="flex">
+            <span className="w-20 font-semibold">Period</span>
+            <span>
+              : {formatDateDmyDot(bill.from_date)}-{formatDateDmyDot(bill.to_date)}
+            </span>
+          </div>
+          <div className="flex pt-1">
+            <span className="w-20 font-bold">Party</span>
+            <span className="font-bold">
+              : {partyName} {partyGstin && partyGstin !== '—' ? `(GSTIN: ${partyGstin})` : ''}
+            </span>
+          </div>
+          <div className="flex">
+            <span className="w-20 font-semibold">Address</span>
+            <span>: {partyAddress}</span>
+          </div>
+          <div className="flex">
+            <span className="w-20 font-semibold">GSTIN</span>
+            <span className="font-bold">: {partyGstin}</span>
+          </div>
+          <div className="flex">
+            <span className="w-20 font-semibold">State</span>
+            <span>: {partyState} (Code: {partyStateCode})</span>
+          </div>
+          <div className="flex">
+            <span className="w-20 font-semibold">SAC Code</span>
+            <span>:</span>
+          </div>
+        </div>
+
+        <div className="text-right flex flex-col justify-between space-y-0.5">
+          <div>
+            <div className="flex justify-end">
+              <span className="font-bold mr-2">Bill Date :</span>
+              <span className="font-bold">{formatDateDmyDot(bill.bill_date)}</span>
+            </div>
+          </div>
+          <div className="mb-5">
+            <div className="flex justify-end">
+              <span className="font-semibold mr-2">Reverse Charge? :</span>
+              <span className="font-semibold">No</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. SAUDA & BROKERAGE TABLE */}
+      <div className="my-1">
+        {/* Top dashed divider */}
+        <div className="border-t border-dashed border-black w-full my-1" />
+
+        <table className="w-full text-left text-[11px] border-collapse font-mono">
+          <thead>
+            <tr className="font-semibold text-black">
+              <th className="py-0 px-1 text-left"></th>
+              <th className="py-0 px-1 text-left"></th>
+              <th className="py-0 px-1 text-left"></th>
+              <th className="py-0 px-1 text-left"></th>
+              <th className="py-0 px-1 text-right"></th>
+              <th className="py-0 px-1 text-right">Sauda</th>
+              <th className="py-0 px-1 text-right">Sauda</th>
+              <th className="py-0 px-1 text-right">Brokerage</th>
+              <th className="py-0 px-1 text-right">Brokerage</th>
+            </tr>
+            <tr className="font-semibold text-black">
+              <th className="pb-1 px-1 text-left">Date</th>
+              <th className="pb-1 px-1 text-left">Sauda#</th>
+              <th className="pb-1 px-1 text-left">Seller/Buyer</th>
+              <th className="pb-1 px-1 text-left">Commodity</th>
+              <th className="pb-1 px-1 text-right">Bags</th>
+              <th className="pb-1 px-1 text-right">Weight</th>
+              <th className="pb-1 px-1 text-right">Rate</th>
+              <th className="pb-1 px-1 text-right">Rate</th>
+              <th className="pb-1 px-1 text-right">Amount</th>
+            </tr>
+            <tr>
+              <td colSpan={9} className="py-0">
+                <div className="border-t border-dashed border-black w-full" />
+              </td>
+            </tr>
+          </thead>
+
+          <tbody>
+            {/* SELLERS BROKERAGE SECTION (Always Shown) */}
+            <tr>
+              <td
+                colSpan={9}
+                className="pt-2 pb-0.5 px-1 font-bold tracking-wide text-black"
+              >
+                ** Sellers Brokerage **
+              </td>
+            </tr>
+            {sellerLines.length > 0 && renderSectionRows(sellerLines, true)}
+            {/* Dashed line above subtotal */}
+            <tr>
+              <td colSpan={4}></td>
+              <td className="text-right px-1 text-[10px]">------</td>
+              <td className="text-right px-1 text-[10px]">------------</td>
+              <td colSpan={2}></td>
+              <td className="text-right px-1 text-[10px]">---------</td>
+            </tr>
+            {/* Subtotal row */}
+            <tr className="font-semibold text-black">
+              <td colSpan={4}></td>
+              <td className="py-0.5 px-1 text-right">{sellerSubtotal.bags}</td>
+              <td className="py-0.5 px-1 text-right">
+                {formatNum(sellerSubtotal.weight, 3)}
+              </td>
+              <td colSpan={2}></td>
+              <td className="py-0.5 px-1 text-right font-bold">
+                {formatNum(sellerSubtotal.brokerage, 2)}
+              </td>
+            </tr>
+
+            {/* BUYERS BROKERAGE SECTION (Always Shown) */}
+            <tr>
+              <td
+                colSpan={9}
+                className="pt-2 pb-0.5 px-1 font-bold tracking-wide text-black"
+              >
+                ** Buyer's Brokerage **
+              </td>
+            </tr>
+            {buyerLines.length > 0 && renderSectionRows(buyerLines, false)}
+            {/* Dashed line above subtotal */}
+            <tr>
+              <td colSpan={4}></td>
+              <td className="text-right px-1 text-[10px]">------</td>
+              <td className="text-right px-1 text-[10px]">------------</td>
+              <td colSpan={2}></td>
+              <td className="text-right px-1 text-[10px]">---------</td>
+            </tr>
+            {/* Subtotal row */}
+            <tr className="font-semibold text-black">
+              <td colSpan={4}></td>
+              <td className="py-0.5 px-1 text-right">{buyerSubtotal.bags}</td>
+              <td className="py-0.5 px-1 text-right">
+                {formatNum(buyerSubtotal.weight, 3)}
+              </td>
+              <td colSpan={2}></td>
+              <td className="py-0.5 px-1 text-right font-bold">
+                {formatNum(buyerSubtotal.brokerage, 2)}
+              </td>
+            </tr>
+          </tbody>
+
+          {/* TABLE TOTAL ROW */}
+          <tfoot>
+            <tr>
+              <td colSpan={9} className="py-1">
+                <div className="border-t border-dashed border-black w-full" />
+              </td>
+            </tr>
+            <tr className="font-bold text-black">
+              <td colSpan={4} className="py-0.5 px-1">
+                Total
+              </td>
+              <td className="py-0.5 px-1 text-right">{totalBags}</td>
+              <td className="py-0.5 px-1 text-right font-bold">
+                {formatNum(totalWeight, 3)}
+              </td>
+              <td colSpan={2} className="py-0.5 px-1 text-right">
+                Total
+              </td>
+              <td className="py-0.5 px-1 text-right font-bold">
+                {formatNum(totalBrokerage, 2)}
+              </td>
+            </tr>
+            <tr>
+              <td colSpan={9} className="py-1">
+                <div className="border-t border-dashed border-black w-full" />
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      {/* 4. BANK DETAILS & TAX BREAKDOWN */}
+      <div className="grid grid-cols-12 gap-2 py-1 text-[11px]">
+        <div className="col-span-7 flex flex-col justify-start pt-1">
+          <div className="font-semibold">
+            Our Bank: {bankName}, Acc #: {accountNo}, IFSC: {ifscCode}
+          </div>
+        </div>
+        <div className="col-span-5 text-right space-y-0.5">
+          {isInterState && (
+            <div className="flex justify-between font-bold">
+              <span>IGST{igstRate || 18}%</span>
+              <span>{formatNum(igstAmount, 2)}</span>
+            </div>
+          )}
+          {!isInterState && (
+            <>
+              <div className="flex justify-between font-bold">
+                <span>CGST{cgstRate || 9}%</span>
+                <span>{formatNum(cgstAmount, 2)}</span>
+              </div>
+              <div className="flex justify-between font-bold">
+                <span>SGST{sgstRate || 9}%</span>
+                <span>{formatNum(sgstAmount, 2)}</span>
+              </div>
+            </>
+          )}
+          <div className="flex justify-between font-bold">
+            <span>Net Amount</span>
+            <span>{formatNum(netAmount, 2)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 5. AMOUNT IN WORDS */}
+      <div className="border-t border-dashed border-black w-full my-1" />
+      <div className="py-1 text-[11px] font-semibold">
+        In Words: <span className="font-bold">{amountInWords(netAmount)}</span>
+      </div>
+      <div className="border-t border-dashed border-black w-full my-1" />
+
+      {/* 6. SIGNATURES & FOOTER */}
+      <div className="pt-2 text-[11px]">
+        <div className="text-right font-bold mb-8">
+          For {companyName}
+        </div>
+        <div className="flex items-center justify-between text-black pt-1">
+          <div>E. & O. E.</div>
+          <div>Receiver's Signature</div>
+          <div className="font-semibold">Authorised Signatory</div>
+        </div>
       </div>
     </article>
   )

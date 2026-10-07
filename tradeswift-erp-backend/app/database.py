@@ -25,11 +25,13 @@ def init_db() -> None:
         Company,
         Contract,
         DocumentSequence,
+        MasterChangeRequest,
         Party,
         PaymentTerm,
         RateMaster,
         Tax,
         Unit,
+        User,
     )
 
     Base.metadata.create_all(bind=engine)
@@ -37,6 +39,7 @@ def init_db() -> None:
     _migrate_companies_table()
     _migrate_contracts_table()
     _migrate_rate_masters_table()
+    _migrate_users_table()
 
 
 def _party_columns(conn) -> set[str]:
@@ -85,6 +88,30 @@ def _migrate_parties_table() -> None:
         if "bank_name" not in cols:
             conn.execute(text("ALTER TABLE parties ADD COLUMN bank_name VARCHAR(100)"))
             cols.add("bank_name")
+
+        cheque_cols = {
+            "cancelled_cheque_path": "VARCHAR(255)",
+            "cancelled_cheque_filename": "VARCHAR(255)",
+            "cancelled_cheque_uploaded_at": "DATETIME",
+        }
+        for col_name, col_type in cheque_cols.items():
+            if col_name not in cols:
+                conn.execute(text(f"ALTER TABLE parties ADD COLUMN {col_name} {col_type}"))
+                cols.add(col_name)
+
+        if "credit_limit" not in cols:
+            conn.execute(text("ALTER TABLE parties ADD COLUMN credit_limit NUMERIC(14, 2) DEFAULT 5000000.0"))
+            cols.add("credit_limit")
+
+        try:
+            conn.execute(
+                text(
+                    "UPDATE parties SET company_id = (SELECT id FROM companies LIMIT 1) "
+                    "WHERE company_id IS NULL AND (SELECT COUNT(*) FROM companies) > 0"
+                )
+            )
+        except Exception:
+            pass
 
         _migrate_party_unique_constraints(conn)
 
@@ -298,6 +325,14 @@ def _migrate_contracts_table() -> None:
             except Exception:
                 pass
 
+        if "notes" not in cols:
+            conn.execute(text("ALTER TABLE contracts ADD COLUMN notes TEXT"))
+            cols.add("notes")
+
+        if "broker_rate_type" not in cols:
+            conn.execute(text("ALTER TABLE contracts ADD COLUMN broker_rate_type VARCHAR(20) DEFAULT 'FIXED'"))
+            cols.add("broker_rate_type")
+
     _migrate_bill_line_items_table()
 
 
@@ -362,25 +397,114 @@ def _migrate_rate_masters_table() -> None:
                 }
         except Exception:
             return
-        if not cols or "rate_type" in cols:
+        if not cols:
             return
 
-        if settings.database_url.startswith("sqlite"):
-            conn.execute(
-                text("ALTER TABLE rate_masters ADD COLUMN rate_type VARCHAR(20) DEFAULT 'FIXED'")
-            )
-        else:
-            try:
+        if "rate_type" not in cols:
+            if settings.database_url.startswith("sqlite"):
                 conn.execute(
-                    text(
-                        "ALTER TABLE rate_masters ADD COLUMN rate_type "
-                        "ENUM('FIXED','PERCENTAGE') NOT NULL DEFAULT 'FIXED'"
-                    )
+                    text("ALTER TABLE rate_masters ADD COLUMN rate_type VARCHAR(20) DEFAULT 'FIXED'")
                 )
-            except Exception:
-                conn.execute(
-                    text(
-                        "ALTER TABLE rate_masters ADD COLUMN rate_type "
-                        "VARCHAR(20) NOT NULL DEFAULT 'FIXED'"
+            else:
+                try:
+                    conn.execute(
+                        text(
+                            "ALTER TABLE rate_masters ADD COLUMN rate_type "
+                            "ENUM('FIXED','PERCENTAGE') NOT NULL DEFAULT 'FIXED'"
+                        )
                     )
-                )
+                except Exception:
+                    conn.execute(
+                        text(
+                            "ALTER TABLE rate_masters ADD COLUMN rate_type "
+                            "VARCHAR(20) NOT NULL DEFAULT 'FIXED'"
+                        )
+                    )
+            cols.add("rate_type")
+
+        if "brokerage_type" not in cols:
+            conn.execute(text("ALTER TABLE rate_masters ADD COLUMN brokerage_type VARCHAR(20) DEFAULT 'FIXED'"))
+            cols.add("brokerage_type")
+
+
+def _migrate_users_table() -> None:
+    """Seed initial Admin and Employee users and ensure password column exists."""
+    from sqlalchemy import text
+    from sqlalchemy.orm import Session
+    from app.models import User
+    from app.models.enums import UserRole
+
+    # 1. Add password column if missing
+    try:
+        with engine.connect() as conn:
+            if settings.database_url.startswith("sqlite"):
+                cols = {
+                    row[1]
+                    for row in conn.execute(text("PRAGMA table_info(users)")).fetchall()
+                }
+            else:
+                cols = {
+                    row[0]
+                    for row in conn.execute(
+                        text(
+                            "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS "
+                            "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users'"
+                        )
+                    ).fetchall()
+                }
+            if cols and "password" not in cols:
+                conn.execute(text("ALTER TABLE users ADD COLUMN password VARCHAR(255) DEFAULT 'admin123'"))
+                conn.commit()
+    except Exception:
+        pass
+
+    # 2. Seed or update default users with exact passwords
+    with Session(bind=engine) as session:
+        try:
+            count = session.query(User).count()
+            if count == 0:
+                default_users = [
+                    User(
+                        username="kannu",
+                        full_name="Kannu",
+                        email="kannu@tradeswift.com",
+                        password="admin123",
+                        role=UserRole.ADMIN,
+                        designation="Chief Supervisor / Admin",
+                    ),
+                    User(
+                        username="kanha",
+                        full_name="Kanha",
+                        email="kanha@tradeswift.com",
+                        password="admin123",
+                        role=UserRole.ADMIN,
+                        designation="Senior Supervisor / Admin",
+                    ),
+                    User(
+                        username="trader_ops",
+                        full_name="Trader Operations",
+                        email="ops@tradeswift.com",
+                        password="employee123",
+                        role=UserRole.EMPLOYEE,
+                        designation="Desk Trader / Operator",
+                    ),
+                ]
+                session.add_all(default_users)
+                session.commit()
+            else:
+                kannu = session.query(User).filter((User.username == "kannu") | (User.email == "kannu@tradeswift.com")).first()
+                if kannu:
+                    kannu.email = "kannu@tradeswift.com"
+                    kannu.password = "admin123"
+                kanha = session.query(User).filter((User.username == "kanha") | (User.email == "kanha@tradeswift.com")).first()
+                if kanha:
+                    kanha.email = "kanha@tradeswift.com"
+                    kanha.password = "admin123"
+                ops = session.query(User).filter((User.username == "trader_ops") | (User.email == "ops@tradeswift.com")).first()
+                if ops:
+                    ops.email = "ops@tradeswift.com"
+                    ops.password = "employee123"
+                session.commit()
+        except Exception:
+            session.rollback()
+

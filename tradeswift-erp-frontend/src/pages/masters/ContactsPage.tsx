@@ -8,7 +8,10 @@ import { DataTable } from '../../components/DataTable'
 import { Modal, FormField, inputClass, Alert } from '../../components/Modal'
 import { Badge } from '../../components/Badge'
 
+import { useActiveUser } from '../../context/UserContext'
+
 export function ContactsPage() {
+  const { isAdmin } = useActiveUser()
   const [rows, setRows] = useState<Contact[]>([])
   const [parties, setParties] = useState<Party[]>([])
   const [loading, setLoading] = useState(true)
@@ -75,8 +78,14 @@ export function ContactsPage() {
       designation: form.designation || null,
     }
     try {
-      if (editing) await mastersApi.contacts.update(editing.id, payload)
-      else await mastersApi.contacts.create(payload)
+      if (editing) {
+        await mastersApi.contacts.update(editing.id, payload)
+        if (!isAdmin) {
+          alert('Change request submitted! Since you are signed in as an Employee, changes are not updated immediately and have been routed to the Governance → Approvals section for Administrator approval.')
+        }
+      } else {
+        await mastersApi.contacts.create(payload)
+      }
       setModalOpen(false)
       await load()
     } catch (e) {
@@ -99,12 +108,14 @@ export function ContactsPage() {
         subtitle="Contact persons linked to parties / companies"
         action={
           <div className="flex gap-2">
-            <Button variant="secondary" size="sm" onClick={load}>
-              <RefreshCw size={16} />
+            <Button variant="secondary" size="sm" onClick={load} disabled={loading} title="Reload contacts">
+              <RefreshCw size={16} className={loading ? 'animate-spin text-brand-600' : ''} />
             </Button>
-            <Button size="sm" onClick={openCreate}>
-              <Plus size={16} /> Add Contact
-            </Button>
+            {isAdmin && (
+              <Button size="sm" onClick={openCreate}>
+                <Plus size={16} /> Add Contact
+              </Button>
+            )}
           </div>
         }
       />
@@ -134,18 +145,20 @@ export function ContactsPage() {
               {
                 key: 'actions',
                 label: '',
-                render: (r) => (
+                render: (r: Record<string, unknown>) => (
                   <div className="flex gap-1">
                     <button
                       onClick={() => openEdit(r as unknown as Contact)}
                       className="rounded p-1.5 text-slate-400 hover:text-brand-600"
+                      title="Edit Contact"
                     >
                       <Pencil size={16} />
                     </button>
-                    {(r.is_active as boolean) && (
+                    {isAdmin && (r.is_active as boolean) && (
                       <button
                         onClick={() => remove(r.id as string)}
                         className="rounded p-1.5 text-slate-400 hover:text-red-600"
+                        title="Deactivate Contact"
                       >
                         <Trash2 size={16} />
                       </button>

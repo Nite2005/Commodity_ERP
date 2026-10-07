@@ -33,6 +33,12 @@ button {
   border-radius: 4px;
 }
 
+@media screen {
+  .print-only {
+    display: none !important;
+  }
+}
+
 @media print {
   body {
     background: white !important;
@@ -42,6 +48,10 @@ button {
   header,
   .print\:hidden {
     display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
   }
 
   main {

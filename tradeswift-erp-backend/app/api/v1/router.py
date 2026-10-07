@@ -1,10 +1,12 @@
 from fastapi import APIRouter
 
+from app.api.v1.approvals import router as approvals_router
 from app.api.v1.bills import router as bills_router
 from app.api.v1.contracts import router as contracts_router
 from app.api.v1.despatches import router as despatches_router
 from app.api.v1.masters import router as masters_router
 from app.api.v1.reports import router as reports_router
+from app.api.v1.users import router as users_router
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(masters_router)
@@ -12,3 +14,7 @@ api_router.include_router(contracts_router)
 api_router.include_router(despatches_router)
 api_router.include_router(bills_router)
 api_router.include_router(reports_router)
+api_router.include_router(approvals_router)
+api_router.include_router(users_router)
+
+

@@ -54,3 +54,29 @@ class SupplyType(str, enum.Enum):
 class RateType(str, enum.Enum):
     FIXED = "FIXED"
     PERCENTAGE = "PERCENTAGE"
+
+
+class ApprovalStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+
+class EntityType(str, enum.Enum):
+    PARTY = "PARTY"
+    RATE = "RATE"
+    COMPANY = "COMPANY"
+    CONTACT = "CONTACT"
+    BROKER = "BROKER"
+    COMMODITY = "COMMODITY"
+    TAX = "TAX"
+    UNIT = "UNIT"
+    PAYMENT_TERM = "PAYMENT_TERM"
+    CONTRACT = "CONTRACT"
+
+
+class UserRole(str, enum.Enum):
+    ADMIN = "ADMIN"
+    EMPLOYEE = "EMPLOYEE"
+
+

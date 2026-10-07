@@ -1,7 +1,9 @@
 import csv
 import io
 from datetime import date
+from decimal import Decimal
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload
 
 from app.models import Bill, Contract, Party
@@ -124,3 +126,104 @@ class ReportService:
         for row in rows:
             writer.writerow(["" if row.get(k) is None else row.get(k) for k in field_keys])
         return buf.getvalue()
+
+    @staticmethod
+    def get_party_ledger(db: Session, party_id: str) -> dict:
+        try:
+            from uuid import UUID
+            u = UUID(str(party_id))
+            party_keys = [u.hex, str(u)]
+        except Exception:
+            party_keys = [str(party_id)]
+
+        party = db.query(Party).filter(Party.id.in_(party_keys)).first()
+        if not party:
+            raise HTTPException(status_code=404, detail="Party not found.")
+
+        credit_limit = Decimal(str(party.credit_limit or 5000000.00)).quantize(Decimal("0.01"))
+
+        contracts = (
+            db.query(Contract)
+            .options(
+                joinedload(Contract.commodity),
+                joinedload(Contract.seller),
+                joinedload(Contract.buyer),
+            )
+            .filter(
+                Contract.is_active.is_(True),
+                (Contract.seller_id.in_(party_keys)) | (Contract.buyer_id.in_(party_keys)),
+            )
+            .order_by(Contract.contract_date.desc(), Contract.contract_no.desc())
+            .all()
+        )
+
+        bills = (
+            db.query(Bill)
+            .filter(Bill.party_id.in_(party_keys), Bill.is_active.is_(True))
+            .all()
+        )
+        total_billed_amount = sum(
+            (Decimal(str(b.gross_amount or 0)) for b in bills),
+            Decimal("0.00"),
+        ).quantize(Decimal("0.01"))
+
+        items: list[dict] = []
+        for c in contracts:
+            role = "SELLER" if str(c.seller_id) in party_keys else "BUYER"
+            qty = Decimal(str(c.final_qty if c.final_qty is not None else c.qty_high))
+            rate = Decimal(str(c.rate))
+            total_value = (qty * rate).quantize(Decimal("0.01"))
+
+            billed_qty = Decimal(str(c.billed_qty or 0))
+            billed_portion = (billed_qty * rate).quantize(Decimal("0.01"))
+
+            if c.status == ContractStatus.CANCELLED:
+                adjustments = total_value
+                pending_payment = Decimal("0.00")
+                net_due = Decimal("0.00")
+            elif c.status == ContractStatus.CLOSED:
+                adjustments = min(total_value, billed_portion)
+                pending_payment = max(Decimal("0.00"), total_value - adjustments)
+                net_due = pending_payment
+            else:
+                adjustments = min(total_value, billed_portion)
+                pending_payment = max(Decimal("0.00"), total_value - adjustments)
+                net_due = pending_payment
+
+            items.append({
+                "contract_id": c.id,
+                "contract_no": c.contract_no,
+                "contract_date": c.contract_date,
+                "role": role,
+                "commodity_name": c.commodity.commodity_name if c.commodity else None,
+                "status": c.status,
+                "quantity": qty,
+                "qty_unit": c.qty_unit,
+                "rate": rate,
+                "total_value": total_value,
+                "pending_payment": pending_payment,
+                "adjustments": adjustments,
+                "net_due": net_due,
+            })
+
+        total_contract_value = sum((i["total_value"] for i in items), Decimal("0.00")).quantize(Decimal("0.01"))
+        total_adjustments = sum((i["adjustments"] for i in items), Decimal("0.00")).quantize(Decimal("0.01"))
+        total_outstanding = sum((i["net_due"] for i in items), Decimal("0.00")).quantize(Decimal("0.01"))
+        is_overdue = total_outstanding > credit_limit
+        status_label = "Limit Exceeded / Overdue" if is_overdue else "Within Limit"
+
+        return {
+            "party_id": party.id,
+            "party_name": party.name,
+            "party_code": party.party_code,
+            "credit_limit": credit_limit,
+            "total_outstanding": total_outstanding,
+            "total_contract_value": total_contract_value,
+            "total_billed_amount": total_billed_amount,
+            "total_adjustments": total_adjustments,
+            "is_overdue": is_overdue,
+            "status_label": status_label,
+            "contracts_count": len(items),
+            "contracts": items,
+        }
+

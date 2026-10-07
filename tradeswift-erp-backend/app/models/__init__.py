@@ -5,15 +5,18 @@ from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Integer, Numer
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from app.models.enums import (
+    ApprovalStatus,
     BillingStatus,
     ContractStatus,
     ContractType,
     Currency,
     CustomerType,
+    EntityType,
     PaymentTermType,
     QtyUnit,
     RateType,
     SupplyType,
+    UserRole,
 )
 
 
@@ -88,11 +91,15 @@ class Party(Base, AuditMixin):
     account_no: Mapped[str | None] = mapped_column(String(30))
     bank_name: Mapped[str | None] = mapped_column(String(100))
     ifsc_code: Mapped[str | None] = mapped_column(String(11))
+    cancelled_cheque_path: Mapped[str | None] = mapped_column(String(255))
+    cancelled_cheque_filename: Mapped[str | None] = mapped_column(String(255))
+    cancelled_cheque_uploaded_at: Mapped[datetime | None] = mapped_column(DateTime)
     phone: Mapped[str | None] = mapped_column(String(50))
     mobile: Mapped[str | None] = mapped_column(String(50))
     email: Mapped[str | None] = mapped_column(String(100))
     contact_name: Mapped[str | None] = mapped_column(String(100))
     designation: Mapped[str | None] = mapped_column(String(100))
+    credit_limit: Mapped[float | None] = mapped_column(Numeric(14, 2), default=5000000.0, nullable=True)
 
     company: Mapped["Company | None"] = relationship(back_populates="parties")
     rates: Mapped[list["RateMaster"]] = relationship(back_populates="party")
@@ -156,6 +163,7 @@ class RateMaster(Base, AuditMixin):
     rate: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     unit: Mapped[QtyUnit] = mapped_column(Enum(QtyUnit), nullable=False)
     currency: Mapped[Currency] = mapped_column(Enum(Currency), default=Currency.INR)
+    brokerage_type: Mapped[RateType] = mapped_column(Enum(RateType), default=RateType.FIXED, nullable=False)
     brokerage: Mapped[float] = mapped_column(Numeric(8, 2), default=0)
 
     party: Mapped[Party] = relationship(back_populates="rates")
@@ -185,6 +193,7 @@ class Contract(Base, AuditMixin):
     is_nominee: Mapped[bool] = mapped_column(Boolean, default=False)
     commodity_id: Mapped[str] = mapped_column(String(36), ForeignKey("commodities.id"), nullable=False)
     quality_allowance: Mapped[str | None] = mapped_column(String(1000))
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     packing: Mapped[str] = mapped_column(String(100), nullable=False)
     qty_low: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     qty_high: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
@@ -198,6 +207,7 @@ class Contract(Base, AuditMixin):
     despatch_to: Mapped[date] = mapped_column(Date, nullable=False)
     broker_id: Mapped[str] = mapped_column(String(36), ForeignKey("brokers.id"), nullable=False)
     broker_rate: Mapped[float] = mapped_column(Numeric(8, 2), nullable=False)
+    broker_rate_type: Mapped[RateType] = mapped_column(Enum(RateType), default=RateType.FIXED, nullable=False)
     final_qty: Mapped[float | None] = mapped_column(Numeric(10, 2))
     tolerance_percent: Mapped[float] = mapped_column(Numeric(5, 2), default=5)
     fulfilled_qty: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
@@ -280,3 +290,39 @@ class BillLineItem(Base, AuditMixin):
     bill: Mapped[Bill] = relationship(back_populates="line_items")
     despatch: Mapped[Despatch] = relationship()
     contract: Mapped[Contract] = relationship()
+
+
+class MasterChangeRequest(Base, AuditMixin):
+    """Pending change requests for sensitive master data requiring supervisor approval."""
+
+    __tablename__ = "master_change_requests"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    entity_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    entity_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    entity_name: Mapped[str] = mapped_column(String(150), nullable=False)
+    change_summary: Mapped[str] = mapped_column(String(255), nullable=False)
+    changes_json: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[ApprovalStatus] = mapped_column(
+        Enum(ApprovalStatus), default=ApprovalStatus.PENDING, nullable=False
+    )
+    requested_by: Mapped[str] = mapped_column(String(100), default="User")
+    reviewed_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    rejection_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+
+class User(Base, AuditMixin):
+    """System users with role privileges (ADMIN vs EMPLOYEE)."""
+
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    username: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    full_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    password: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.EMPLOYEE, nullable=False)
+    designation: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+
