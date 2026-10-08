@@ -3,8 +3,10 @@ import shutil
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
+
+from app.services.r2_storage import R2StorageService
 
 from app.database import get_db
 from app.models import (
@@ -572,20 +574,38 @@ def upload_cancelled_cheque(
             detail="Invalid file format. Allowed formats: JPG, JPEG, PNG, PDF, WEBP",
         )
 
-    upload_dir = os.path.join("uploads", "cancelled_cheques")
-    os.makedirs(upload_dir, exist_ok=True)
     safe_name = f"cheque_{row.id}_{int(datetime.utcnow().timestamp())}{ext}"
-    file_path = os.path.join(upload_dir, safe_name)
 
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    if R2StorageService.is_enabled():
+        key = f"cheques/{safe_name}"
+        R2StorageService.upload_file(file.file, key, content_type=file.content_type)
 
-    # Clean up old file if exists
-    if row.cancelled_cheque_path and os.path.exists(row.cancelled_cheque_path) and row.cancelled_cheque_path != file_path:
-        try:
-            os.remove(row.cancelled_cheque_path)
-        except Exception:
-            pass
+        # Clean up old file if exists
+        if row.cancelled_cheque_path:
+            if row.cancelled_cheque_path.startswith("r2://"):
+                old_key = row.cancelled_cheque_path.replace("r2://", "")
+                R2StorageService.delete_file(old_key)
+            elif os.path.exists(row.cancelled_cheque_path):
+                try:
+                    os.remove(row.cancelled_cheque_path)
+                except Exception:
+                    pass
+
+        file_path = f"r2://{key}"
+    else:
+        upload_dir = os.path.join("uploads", "cancelled_cheques")
+        os.makedirs(upload_dir, exist_ok=True)
+        file_path = os.path.join(upload_dir, safe_name)
+
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        # Clean up old file if exists
+        if row.cancelled_cheque_path and os.path.exists(row.cancelled_cheque_path) and row.cancelled_cheque_path != file_path:
+            try:
+                os.remove(row.cancelled_cheque_path)
+            except Exception:
+                pass
 
     row.cancelled_cheque_path = file_path
     row.cancelled_cheque_filename = file.filename
@@ -626,6 +646,24 @@ def get_cancelled_cheque(
     if not row or not row.cancelled_cheque_path:
         raise HTTPException(status_code=404, detail="No cancelled cheque on file for this party")
 
+    # Cloudflare R2 storage
+    if row.cancelled_cheque_path.startswith("r2://"):
+        key = row.cancelled_cheque_path.replace("r2://", "")
+        try:
+            body, content_type, length = R2StorageService.get_file(key)
+        except Exception as e:
+            raise HTTPException(status_code=404, detail=f"Cheque document not found on cloud storage: {e}")
+
+        filename = row.cancelled_cheque_filename or "cancelled_cheque"
+        return StreamingResponse(
+            body,
+            media_type=content_type,
+            headers={
+                "Content-Disposition": f'inline; filename="{filename}"',
+            },
+        )
+
+    # Local filesystem fallback
     if not os.path.exists(row.cancelled_cheque_path):
         raise HTTPException(status_code=404, detail="Cheque document not found on storage")
 
@@ -653,11 +691,15 @@ def delete_cancelled_cheque(
     if not row:
         raise HTTPException(status_code=404, detail="Party not found")
 
-    if row.cancelled_cheque_path and os.path.exists(row.cancelled_cheque_path):
-        try:
-            os.remove(row.cancelled_cheque_path)
-        except Exception:
-            pass
+    if row.cancelled_cheque_path:
+        if row.cancelled_cheque_path.startswith("r2://"):
+            key = row.cancelled_cheque_path.replace("r2://", "")
+            R2StorageService.delete_file(key)
+        elif os.path.exists(row.cancelled_cheque_path):
+            try:
+                os.remove(row.cancelled_cheque_path)
+            except Exception:
+                pass
 
     row.cancelled_cheque_path = None
     row.cancelled_cheque_filename = None

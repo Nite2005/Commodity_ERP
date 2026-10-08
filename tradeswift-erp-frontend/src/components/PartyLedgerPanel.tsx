@@ -64,6 +64,10 @@ export function PartyLedgerPanel({
   }
 
   useEffect(() => {
+    setSelectedPartyId(buyerId || sellerId)
+  }, [buyerId, sellerId])
+
+  useEffect(() => {
     if (selectedPartyId) {
       fetchLedger(selectedPartyId)
     }

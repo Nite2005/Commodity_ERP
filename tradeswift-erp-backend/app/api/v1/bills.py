@@ -1,6 +1,7 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
@@ -13,6 +14,7 @@ from app.schemas.bill import (
     BillResponse,
 )
 from app.services.billing_service import BillingService
+from app.services.r2_storage import R2StorageService
 from app.utils.ids import as_db_id, uuid_variants
 
 router = APIRouter(prefix="/bills", tags=["Bills"])
@@ -91,3 +93,37 @@ def get_bill(bill_id: str, db: Session = Depends(get_db)):
 def create_bill(payload: BillCreate, db: Session = Depends(get_db)):
     row = BillingService.generate(db, payload)
     return BillCreateResponse(bill_no=row.bill_no, id=row.id)
+
+
+@router.post("/{bill_id}/pdf")
+def upload_bill_pdf(
+    bill_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    row = _load_bill(db, bill_id)
+    safe_no = str(row.bill_no).replace("/", "_").replace(" ", "_")
+    key = f"invoices/invoice_{safe_no}.pdf"
+    if R2StorageService.is_enabled():
+        R2StorageService.upload_file(file.file, key, content_type="application/pdf")
+        return {"status": "SUCCESS", "message": "Bill PDF saved to Cloudflare R2", "key": key}
+    return {"status": "SKIPPED", "message": "R2 storage not enabled"}
+
+
+@router.get("/{bill_id}/pdf")
+def get_bill_pdf(bill_id: str, db: Session = Depends(get_db)):
+    row = _load_bill(db, bill_id)
+    safe_no = str(row.bill_no).replace("/", "_").replace(" ", "_")
+    key = f"invoices/invoice_{safe_no}.pdf"
+    if R2StorageService.is_enabled():
+        try:
+            body, content_type, length = R2StorageService.get_file(key)
+            return StreamingResponse(
+                body,
+                media_type="application/pdf",
+                headers={"Content-Disposition": f'inline; filename="invoice-{safe_no}.pdf"'},
+            )
+        except Exception:
+            raise HTTPException(status_code=404, detail="Archived bill PDF not found in cloud storage")
+    raise HTTPException(status_code=400, detail="Cloud storage not enabled")
+

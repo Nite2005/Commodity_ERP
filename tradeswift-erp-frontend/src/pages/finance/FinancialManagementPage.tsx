@@ -194,6 +194,7 @@ export function FinancialManagementPage() {
       ) : contractDetail ? (
         <div className="w-full">
           <PartyLedgerPanel
+            key={contractDetail.id}
             sellerId={contractDetail.seller_id}
             sellerName={contractDetail.seller_name || 'Seller'}
             buyerId={contractDetail.buyer_id}

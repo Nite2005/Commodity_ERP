@@ -67,14 +67,14 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
   })
 
   const getLineBrokerage = (item: BillLineItem): number => {
-    if (item.line_brokerage_amount != null && item.line_brokerage_amount > 0) {
+    if (item.line_brokerage_amount != null) {
       return Number(item.line_brokerage_amount)
     }
-    const rate = Number(item.broker_rate || 0)
+    const rate = Number(item.broker_rate ?? 0)
     if (item.broker_rate_type === 'PERCENTAGE') {
       return (Number(item.line_base_amount || 0) * rate) / 100
     }
-    return Number(item.quantity || 0) * (rate > 0 ? rate : 50)
+    return Number(item.quantity || 0) * rate
   }
 
   const calcSubtotal = (items: BillLineItem[]) => {
@@ -89,10 +89,10 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
 
   const totalBags = sellerSubtotal.bags + buyerSubtotal.bags
   const totalWeight = sellerSubtotal.weight + buyerSubtotal.weight
-  const totalBrokerage =
-    sellerSubtotal.brokerage + buyerSubtotal.brokerage > 0
-      ? sellerSubtotal.brokerage + buyerSubtotal.brokerage
-      : Number(bill.brokerage_amount || bill.base_amount || 0)
+  const hasLineItems = sellerLines.length > 0 || buyerLines.length > 0
+  const totalBrokerage = hasLineItems
+    ? sellerSubtotal.brokerage + buyerSubtotal.brokerage
+    : Number(bill.brokerage_amount || 0)
 
   // Determine inter-state (IGST) vs intra-state (CGST+SGST)
   const companyState = bill.company_state || TRADESWIFT_COMPANY.state
@@ -127,7 +127,7 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
       const commodity = line.commodity_short_name || line.commodity_name || '—'
       const weightUnit = line.qty_unit || 'M.T'
       const saudaRate = Number(line.rate || 0)
-      const brokerRate = Number(line.broker_rate ?? 50)
+      const brokerRate = Number(line.broker_rate ?? 0)
       const isPct = line.broker_rate_type === 'PERCENTAGE'
       const lineBrokerage = getLineBrokerage(line)
 

@@ -2,7 +2,7 @@ assets
 canvases
 mcps
 terminals
-.env
+
 .venv/
 venv/
 

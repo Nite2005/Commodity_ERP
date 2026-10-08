@@ -6,10 +6,26 @@ async function billToPdfBlob(bill: BillDetail): Promise<Blob> {
   return componentToPdfBlob(TaxInvoice, { bill }, '#tax-invoice')
 }
 
+const BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000/api/v1'
+
 export async function downloadInvoicePdf(bill: BillDetail) {
   const blob = await billToPdfBlob(bill)
   const safeNo = String(bill.bill_no).replace(/[^\w.-]+/g, '_')
   triggerDownload(blob, `invoice-${safeNo}.pdf`)
+
+  // Asynchronously archive PDF to Cloudflare R2 in the background
+  if (bill.id) {
+    try {
+      const formData = new FormData()
+      formData.append('file', blob, `invoice-${safeNo}.pdf`)
+      fetch(`${BASE}/bills/${bill.id}/pdf`, {
+        method: 'POST',
+        body: formData,
+      }).catch(() => {})
+    } catch {
+      // Non-blocking
+    }
+  }
 }
 
 export async function downloadInvoicesZip(

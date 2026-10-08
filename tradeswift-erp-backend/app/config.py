@@ -8,5 +8,13 @@ class Settings(BaseSettings):
     app_name: str = "Tradeswift ERP API"
     debug: bool = True
 
+    # Cloudflare R2 Storage
+    cloudflare_account_id: str | None = None
+    cloudflare_r2_access_key_id: str | None = None
+    cloudflare_r2_secret_access_key: str | None = None
+    cloudflare_r2_bucket_name: str | None = None
+    cloudflare_r2_endpoint_url: str | None = None
+
 
 settings = Settings()
+

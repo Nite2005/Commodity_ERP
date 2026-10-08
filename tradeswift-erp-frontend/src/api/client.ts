@@ -119,20 +119,26 @@ export const mastersApi = {
     uploadCheque: async (id: string, file: File) => {
       const formData = new FormData()
       formData.append('file', file)
-      const res = await fetch(`/api/v1/masters/parties/${id}/cancelled-cheque`, {
+      const res = await fetch(`${BASE}/masters/parties/${id}/cancelled-cheque`, {
         method: 'POST',
-        headers: { 'X-User-Role': 'ADMIN' },
+        headers: {
+          'X-User-Role': 'ADMIN',
+          ...getAuthHeaders(),
+        },
         body: formData,
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
-        throw new Error(err.detail || 'Failed to upload cancelled cheque')
+        throw new Error(err.detail || `Upload failed (${res.status})`)
       }
       return res.json()
     },
     downloadCheque: async (id: string, role = 'ADMIN') => {
-      const res = await fetch(`/api/v1/masters/parties/${id}/cancelled-cheque`, {
-        headers: { 'X-User-Role': role },
+      const res = await fetch(`${BASE}/masters/parties/${id}/cancelled-cheque`, {
+        headers: {
+          'X-User-Role': role,
+          ...getAuthHeaders(),
+        },
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -141,9 +147,12 @@ export const mastersApi = {
       return res.blob()
     },
     deleteCheque: async (id: string, role = 'ADMIN') => {
-      const res = await fetch(`/api/v1/masters/parties/${id}/cancelled-cheque`, {
+      const res = await fetch(`${BASE}/masters/parties/${id}/cancelled-cheque`, {
         method: 'DELETE',
-        headers: { 'X-User-Role': role },
+        headers: {
+          'X-User-Role': role,
+          ...getAuthHeaders(),
+        },
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
