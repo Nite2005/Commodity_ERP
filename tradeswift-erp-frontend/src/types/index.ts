@@ -199,6 +199,7 @@ export interface Contract {
   final_qty: number | null
   tolerance_percent: number
   fulfilled_qty: number
+  billed_qty?: number
   status: ContractStatus
   print_despatch_si: boolean
   print_tr_final_docs: boolean
@@ -210,6 +211,9 @@ export interface Contract {
 
 export interface ContractDetail extends Contract {
   company_name?: string | null
+  company_address?: string | null
+  company_gstin?: string | null
+  company_phone?: string | null
   seller_name?: string | null
   buyer_name?: string | null
   commodity_name?: string | null
@@ -250,6 +254,7 @@ export interface BillableContract {
   billed_qty: number
   remaining_billable: number
   tax_id: string
+  party_role?: string | null
 }
 
 export interface Bill {

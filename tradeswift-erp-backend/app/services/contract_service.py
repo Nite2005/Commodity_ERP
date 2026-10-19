@@ -141,8 +141,6 @@ class ContractService:
 
         seller_id = data.get("seller_id", row.seller_id)
         buyer_id = data.get("buyer_id", row.buyer_id)
-        if str(seller_id) == str(buyer_id):
-            raise HTTPException(status_code=400, detail="Seller & Buyer cannot be the same party.")
 
         if "company_id" in data:
             comp = cls._require_active_fk(db, Company, data["company_id"], "Company")
@@ -216,6 +214,27 @@ class ContractService:
             raise HTTPException(status_code=404, detail="Contract not found")
         if row.status == ContractStatus.CANCELLED:
             raise HTTPException(status_code=400, detail="Cancelled contract cannot be closed.")
+
+        if final_qty <= 0:
+            raise HTTPException(status_code=400, detail="Final Quantity must be greater than zero.")
+
+        fulfilled_qty = Decimal(str(row.fulfilled_qty or 0))
+        billed_qty = Decimal(str(row.billed_qty or 0))
+        committed_qty = max(fulfilled_qty, billed_qty)
+
+        if committed_qty > 0 and final_qty < committed_qty:
+            unit = row.qty_unit.value if hasattr(row.qty_unit, "value") else str(row.qty_unit)
+            if fulfilled_qty > 0 and billed_qty > 0:
+                committed_type = "delivered/billed"
+            elif fulfilled_qty > 0:
+                committed_type = "delivered"
+            else:
+                committed_type = "billed"
+            raise HTTPException(
+                status_code=400,
+                detail=f"Final Quantity ({final_qty} {unit}) cannot be less than already {committed_type} quantity ({committed_qty} {unit}).",
+            )
+
         row.final_qty = final_qty
         row.status = ContractStatus.CLOSED
         db.commit()
@@ -259,6 +278,9 @@ class ContractService:
             "seller_name": contract.seller.name if contract.seller else None,
             "buyer_name": contract.buyer.name if contract.buyer else None,
             "company_name": contract.company.name if contract.company else None,
+            "company_address": contract.company.address if contract.company else None,
+            "company_gstin": contract.company.gst_tin if contract.company else None,
+            "company_phone": contract.company.phone if contract.company else None,
             "commodity_name": contract.commodity.commodity_name if contract.commodity else None,
             "commodity_short_name": (
                 contract.commodity.comm_short_name if contract.commodity else None

@@ -87,23 +87,28 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
   const sellerSubtotal = calcSubtotal(sellerLines)
   const buyerSubtotal = calcSubtotal(buyerLines)
 
+  const hasSellerLines = sellerLines.length > 0
+  const hasBuyerLines = buyerLines.length > 0
+
   const totalBags = sellerSubtotal.bags + buyerSubtotal.bags
   const totalWeight = sellerSubtotal.weight + buyerSubtotal.weight
-  const hasLineItems = sellerLines.length > 0 || buyerLines.length > 0
+  const hasLineItems = hasSellerLines || hasBuyerLines
   const totalBrokerage = hasLineItems
     ? sellerSubtotal.brokerage + buyerSubtotal.brokerage
     : Number(bill.brokerage_amount || 0)
 
   // Determine inter-state (IGST) vs intra-state (CGST+SGST)
-  const companyState = bill.company_state || TRADESWIFT_COMPANY.state
+  const companyState = (bill.company_state || TRADESWIFT_COMPANY.state || '').trim()
+  const partyStateClean = (partyState || '').trim()
+
   const isInterState =
-    bill.supply_type === 'INTER_STATE' ||
-    (bill.igst_percent != null && Number(bill.igst_percent) > 0) ||
-    partyState.toLowerCase() !== companyState.toLowerCase()
+    partyStateClean && companyState
+      ? partyStateClean.toLowerCase() !== companyState.toLowerCase()
+      : bill.supply_type === 'INTER_STATE'
 
   const igstRate = Number(bill.igst_percent ?? (isInterState ? 18 : 0))
-  const cgstRate = Number(bill.cgst_percent ?? (!isInterState ? 9 : 0))
-  const sgstRate = Number(bill.sgst_percent ?? (!isInterState ? 9 : 0))
+  const cgstRate = Number(bill.cgst_percent ?? (!isInterState ? (igstRate ? igstRate / 2 : 9) : 0))
+  const sgstRate = Number(bill.sgst_percent ?? (!isInterState ? (igstRate ? igstRate / 2 : 9) : 0))
 
   let igstAmount = 0
   let cgstAmount = 0
@@ -112,8 +117,8 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
   if (isInterState && igstRate > 0) {
     igstAmount = Math.round(totalBrokerage * igstRate) / 100
   } else if (!isInterState) {
-    cgstAmount = Math.round(totalBrokerage * (cgstRate || 9)) / 100
-    sgstAmount = Math.round(totalBrokerage * (sgstRate || 9)) / 100
+    cgstAmount = Math.round(totalBrokerage * cgstRate) / 100
+    sgstAmount = Math.round(totalBrokerage * sgstRate) / 100
   }
 
   const taxTotal = igstAmount + cgstAmount + sgstAmount
@@ -148,7 +153,7 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
             {formatNum(line.quantity, 3)} {weightUnit}
           </td>
           <td className="py-0.5 px-1 text-right whitespace-nowrap">
-            {formatNum(saudaRate, 2)}/Qtl
+            {formatNum(saudaRate, 2)}/{weightUnit}
           </td>
           <td className="py-0.5 px-1 text-right whitespace-nowrap font-medium">
             {isPct ? `${formatNum(brokerRate, 2)}%` : `${formatNum(brokerRate, 2)}/${weightUnit}`}
@@ -282,67 +287,83 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
           </thead>
 
           <tbody>
-            {/* SELLERS BROKERAGE SECTION (Always Shown) */}
-            <tr>
-              <td
-                colSpan={9}
-                className="pt-2 pb-0.5 px-1 font-bold tracking-wide text-black"
-              >
-                ** Sellers Brokerage **
-              </td>
-            </tr>
-            {sellerLines.length > 0 && renderSectionRows(sellerLines, true)}
-            {/* Dashed line above subtotal */}
-            <tr>
-              <td colSpan={4}></td>
-              <td className="text-right px-1 text-[10px]">------</td>
-              <td className="text-right px-1 text-[10px]">------------</td>
-              <td colSpan={2}></td>
-              <td className="text-right px-1 text-[10px]">---------</td>
-            </tr>
-            {/* Subtotal row */}
-            <tr className="font-semibold text-black">
-              <td colSpan={4}></td>
-              <td className="py-0.5 px-1 text-right">{sellerSubtotal.bags}</td>
-              <td className="py-0.5 px-1 text-right">
-                {formatNum(sellerSubtotal.weight, 3)}
-              </td>
-              <td colSpan={2}></td>
-              <td className="py-0.5 px-1 text-right font-bold">
-                {formatNum(sellerSubtotal.brokerage, 2)}
-              </td>
-            </tr>
+            {/* SELLERS BROKERAGE SECTION (Only shown when seller items exist) */}
+            {hasSellerLines && (
+              <>
+                <tr>
+                  <td
+                    colSpan={9}
+                    className="pt-2 pb-0.5 px-1 font-bold tracking-wide text-black"
+                  >
+                    ** Sellers Brokerage **
+                  </td>
+                </tr>
+                {renderSectionRows(sellerLines, true)}
+                {/* Dashed line above subtotal */}
+                <tr>
+                  <td colSpan={4}></td>
+                  <td className="text-right px-1 text-[10px]">------</td>
+                  <td className="text-right px-1 text-[10px]">------------</td>
+                  <td colSpan={2}></td>
+                  <td className="text-right px-1 text-[10px]">---------</td>
+                </tr>
+                {/* Subtotal row */}
+                <tr className="font-semibold text-black">
+                  <td colSpan={4}></td>
+                  <td className="py-0.5 px-1 text-right">{sellerSubtotal.bags}</td>
+                  <td className="py-0.5 px-1 text-right">
+                    {formatNum(sellerSubtotal.weight, 3)}
+                  </td>
+                  <td colSpan={2}></td>
+                  <td className="py-0.5 px-1 text-right font-bold">
+                    {formatNum(sellerSubtotal.brokerage, 2)}
+                  </td>
+                </tr>
+              </>
+            )}
 
-            {/* BUYERS BROKERAGE SECTION (Always Shown) */}
-            <tr>
-              <td
-                colSpan={9}
-                className="pt-2 pb-0.5 px-1 font-bold tracking-wide text-black"
-              >
-                ** Buyer's Brokerage **
-              </td>
-            </tr>
-            {buyerLines.length > 0 && renderSectionRows(buyerLines, false)}
-            {/* Dashed line above subtotal */}
-            <tr>
-              <td colSpan={4}></td>
-              <td className="text-right px-1 text-[10px]">------</td>
-              <td className="text-right px-1 text-[10px]">------------</td>
-              <td colSpan={2}></td>
-              <td className="text-right px-1 text-[10px]">---------</td>
-            </tr>
-            {/* Subtotal row */}
-            <tr className="font-semibold text-black">
-              <td colSpan={4}></td>
-              <td className="py-0.5 px-1 text-right">{buyerSubtotal.bags}</td>
-              <td className="py-0.5 px-1 text-right">
-                {formatNum(buyerSubtotal.weight, 3)}
-              </td>
-              <td colSpan={2}></td>
-              <td className="py-0.5 px-1 text-right font-bold">
-                {formatNum(buyerSubtotal.brokerage, 2)}
-              </td>
-            </tr>
+            {/* BUYERS BROKERAGE SECTION (Only shown when buyer items exist) */}
+            {hasBuyerLines && (
+              <>
+                <tr>
+                  <td
+                    colSpan={9}
+                    className="pt-2 pb-0.5 px-1 font-bold tracking-wide text-black"
+                  >
+                    ** Buyer's Brokerage **
+                  </td>
+                </tr>
+                {renderSectionRows(buyerLines, false)}
+                {/* Dashed line above subtotal */}
+                <tr>
+                  <td colSpan={4}></td>
+                  <td className="text-right px-1 text-[10px]">------</td>
+                  <td className="text-right px-1 text-[10px]">------------</td>
+                  <td colSpan={2}></td>
+                  <td className="text-right px-1 text-[10px]">---------</td>
+                </tr>
+                {/* Subtotal row */}
+                <tr className="font-semibold text-black">
+                  <td colSpan={4}></td>
+                  <td className="py-0.5 px-1 text-right">{buyerSubtotal.bags}</td>
+                  <td className="py-0.5 px-1 text-right">
+                    {formatNum(buyerSubtotal.weight, 3)}
+                  </td>
+                  <td colSpan={2}></td>
+                  <td className="py-0.5 px-1 text-right font-bold">
+                    {formatNum(buyerSubtotal.brokerage, 2)}
+                  </td>
+                </tr>
+              </>
+            )}
+
+            {!hasSellerLines && !hasBuyerLines && (
+              <tr>
+                <td colSpan={9} className="py-4 text-center text-slate-500">
+                  No brokerage line items recorded.
+                </td>
+              </tr>
+            )}
           </tbody>
 
           {/* TABLE TOTAL ROW */}
@@ -386,18 +407,18 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
         <div className="col-span-5 text-right space-y-0.5">
           {isInterState && (
             <div className="flex justify-between font-bold">
-              <span>IGST{igstRate || 18}%</span>
+              <span>IGST{igstRate}%</span>
               <span>{formatNum(igstAmount, 2)}</span>
             </div>
           )}
           {!isInterState && (
             <>
               <div className="flex justify-between font-bold">
-                <span>CGST{cgstRate || 9}%</span>
+                <span>CGST{cgstRate}%</span>
                 <span>{formatNum(cgstAmount, 2)}</span>
               </div>
               <div className="flex justify-between font-bold">
-                <span>SGST{sgstRate || 9}%</span>
+                <span>SGST{sgstRate}%</span>
                 <span>{formatNum(sgstAmount, 2)}</span>
               </div>
             </>

@@ -22,7 +22,9 @@ from app.models import (
     Unit,
     User,
 )
-from app.models.enums import ApprovalStatus, CustomerType, EntityType, UserRole
+from decimal import Decimal
+
+from app.models.enums import ApprovalStatus, Currency, CustomerType, EntityType, QtyUnit, RateType, UserRole
 from app.services.approval_service import ApprovalService
 
 
@@ -48,6 +50,7 @@ from app.schemas.masters import (
     BrokerCreate,
     BrokerResponse,
     BrokerUpdate,
+    BulkImportResult,
     ContactCreate,
     ContactResponse,
     ContactUpdate,
@@ -57,12 +60,14 @@ from app.schemas.masters import (
     CompanyCreate,
     CompanyResponse,
     CompanyUpdate,
+    PartyBulkItem,
     PartyCreate,
     PartyResponse,
     PartyUpdate,
     PaymentTermCreate,
     PaymentTermResponse,
     PaymentTermUpdate,
+    RateMasterBulkItem,
     RateMasterCreate,
     RateMasterResponse,
     RateMasterUpdate,
@@ -346,6 +351,20 @@ def update_tax(
     if not row:
         raise HTTPException(status_code=404, detail="Tax not found")
     data = payload.model_dump(exclude_unset=True)
+    eff_igst = data.get("igst_percent", row.igst_percent)
+    eff_cgst = data.get("cgst_percent", row.cgst_percent)
+    eff_sgst = data.get("sgst_percent", row.sgst_percent)
+    if eff_igst is not None and eff_cgst is not None and eff_sgst is not None:
+        if (eff_cgst + eff_sgst) != eff_igst:
+            raise HTTPException(
+                status_code=400,
+                detail=f"GST percentage mismatch: CGST ({eff_cgst}%) + SGST ({eff_sgst}%) must equal IGST ({eff_igst}%)."
+            )
+        if eff_cgst != eff_sgst:
+            raise HTTPException(
+                status_code=400,
+                detail=f"GST percentage mismatch: CGST ({eff_cgst}%) and SGST ({eff_sgst}%) must be equal (each exactly half of IGST)."
+            )
     is_supervisor = is_admin_requester(db, x_supervisor_approval, x_requested_by)
     diffs = {}
     for f, new_val in data.items():
@@ -433,6 +452,73 @@ def create_party(payload: PartyCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(row)
     return row
+
+
+@router.post("/parties/bulk", response_model=BulkImportResult)
+def bulk_create_parties(
+    payloads: list[PartyBulkItem],
+    company_id: str = Query(...),
+    db: Session = Depends(get_db),
+):
+    cid = as_db_id(company_id)
+    if not db_get(db, Company, cid):
+        raise HTTPException(status_code=400, detail="Company not found.")
+
+    inserted = 0
+    errors = []
+    for idx, p in enumerate(payloads, start=1):
+        name = (p.name or "").strip()
+        if not name:
+            errors.append(f"Row {idx}: Name is missing.")
+            continue
+
+        if db.query(Party).filter(Party.company_id == cid, Party.name == name).first():
+            errors.append(f"Row {idx} ('{name}'): Party already exists.")
+            continue
+
+        short_name = (p.short_name or name[:20]).strip()
+        gst_tin = (p.gst_tin or "").strip() or None
+        cust_type = p.customer_type
+        if not cust_type:
+            cust_type = CustomerType.REGISTERED if gst_tin else CustomerType.UNREGISTERED
+        elif cust_type == CustomerType.REGISTERED and not gst_tin:
+            cust_type = CustomerType.UNREGISTERED
+
+        try:
+            row = Party(
+                party_code=SequenceService.next_code(db, "PARTY"),
+                company_id=cid,
+                name=name,
+                short_name=short_name,
+                customer_type=cust_type,
+                gst_tin=gst_tin,
+                address_line=(p.address_line or "N/A").strip(),
+                city=(p.city or "N/A").strip(),
+                state=(p.state or "N/A").strip(),
+                pincode=(p.pincode or "000000").strip()[:6],
+                mobile=(p.mobile or "").strip() or None,
+                phone=(p.phone or "").strip() or None,
+                email=(p.email or "").strip() or None,
+                contact_name=(p.contact_name or "").strip() or None,
+                designation=(p.designation or "").strip() or None,
+                bank_name=(p.bank_name or "").strip() or None,
+                account_no=(p.account_no or "").strip() or None,
+                ifsc_code=(p.ifsc_code or "").strip() or None,
+                credit_limit=p.credit_limit if p.credit_limit is not None else Decimal("5000000.00"),
+            )
+            db.add(row)
+            db.commit()
+            inserted += 1
+        except Exception as e:
+            db.rollback()
+            errors.append(f"Row {idx} ('{name}'): {str(e)}")
+
+    return BulkImportResult(
+        total=len(payloads),
+        inserted=inserted,
+        failed=len(errors),
+        errors=errors[:50],
+    )
 
 
 @router.get("/parties/{item_id}", response_model=PartyResponse)
@@ -1071,6 +1157,82 @@ def create_rate(payload: RateMasterCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(row)
     return row
+
+
+@router.post("/rates/bulk", response_model=BulkImportResult)
+def bulk_create_rates(
+    payloads: list[RateMasterBulkItem],
+    db: Session = Depends(get_db),
+):
+    inserted = 0
+    errors = []
+
+    all_parties = db.query(Party).filter(Party.is_active.is_(True)).all()
+    party_by_id = {str(p.id): p for p in all_parties}
+    party_by_clean_id = {str(p.id).replace("-", ""): p for p in all_parties}
+    party_by_code = {p.party_code.strip().upper(): p for p in all_parties if p.party_code}
+    party_by_name = {p.name.strip().lower(): p for p in all_parties if p.name}
+
+    all_commodities = db.query(Commodity).filter(Commodity.is_active.is_(True)).all()
+    comm_by_id = {str(c.id): c for c in all_commodities}
+    comm_by_clean_id = {str(c.id).replace("-", ""): c for c in all_commodities}
+    comm_by_name = {c.commodity_name.strip().lower(): c for c in all_commodities if c.commodity_name}
+    comm_by_short = {c.comm_short_name.strip().upper(): c for c in all_commodities if c.comm_short_name}
+
+    for idx, item in enumerate(payloads, start=1):
+        matched_party = None
+        if item.party_id:
+            pid = str(item.party_id).strip()
+            matched_party = party_by_id.get(pid) or party_by_clean_id.get(pid.replace("-", ""))
+        if not matched_party and item.party_code:
+            matched_party = party_by_code.get(item.party_code.strip().upper())
+        if not matched_party and item.party_name:
+            matched_party = party_by_name.get(item.party_name.strip().lower())
+
+        if not matched_party:
+            errors.append(f"Row {idx}: Party '{item.party_name or item.party_code or item.party_id or 'Unknown'}' not found.")
+            continue
+
+        matched_comm = None
+        if item.commodity_id:
+            cid = str(item.commodity_id).strip()
+            matched_comm = comm_by_id.get(cid) or comm_by_clean_id.get(cid.replace("-", ""))
+        if not matched_comm and item.commodity_name:
+            cname = item.commodity_name.strip().lower()
+            matched_comm = comm_by_name.get(cname) or comm_by_short.get(item.commodity_name.strip().upper())
+
+        if not matched_comm:
+            errors.append(f"Row {idx}: Commodity '{item.commodity_name or item.commodity_id or 'Unknown'}' not found.")
+            continue
+
+        cust_type = item.customer_type or matched_party.customer_type or CustomerType.REGISTERED
+
+        try:
+            row = RateMaster(
+                rate_code=SequenceService.next_code(db, "RATE"),
+                party_id=as_db_id(matched_party.id),
+                commodity_id=as_db_id(matched_comm.id),
+                customer_type=cust_type,
+                rate_type=item.rate_type or RateType.FIXED,
+                rate=item.rate,
+                unit=item.unit or QtyUnit.MT,
+                currency=item.currency or Currency.INR,
+                brokerage_type=item.brokerage_type or RateType.FIXED,
+                brokerage=item.brokerage if item.brokerage is not None else Decimal(0),
+            )
+            db.add(row)
+            db.commit()
+            inserted += 1
+        except Exception as e:
+            db.rollback()
+            errors.append(f"Row {idx}: {str(e)}")
+
+    return BulkImportResult(
+        total=len(payloads),
+        inserted=inserted,
+        failed=len(errors),
+        errors=errors[:50],
+    )
 
 
 @router.put("/rates/{item_id}", response_model=RateMasterResponse)

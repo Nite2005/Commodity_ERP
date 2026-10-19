@@ -13,6 +13,39 @@ export function TaxesPage() {
         { name: 'cgst_percent', label: 'CGST %', type: 'number', step: '0.01', required: true },
         { name: 'sgst_percent', label: 'SGST %', type: 'number', step: '0.01', required: true },
       ]}
+      onFieldChange={(name, value, currentForm) => {
+        const next = { ...currentForm, [name]: value }
+        if (name === 'igst_percent') {
+          const val = parseFloat(value)
+          if (!isNaN(val) && val >= 0) {
+            const half = (val / 2).toFixed(2).replace(/\.00$/, '')
+            next.cgst_percent = half
+            next.sgst_percent = half
+          }
+        } else if (name === 'cgst_percent') {
+          next.sgst_percent = value
+          const val = parseFloat(value)
+          if (!isNaN(val) && val >= 0) {
+            next.igst_percent = (val * 2).toFixed(2).replace(/\.00$/, '')
+          }
+        }
+        return next
+      }}
+      validate={(form) => {
+        const igst = Number(form.igst_percent || 0)
+        const cgst = Number(form.cgst_percent || 0)
+        const sgst = Number(form.sgst_percent || 0)
+        const sum = Math.round((cgst + sgst) * 100) / 100
+        const roundedIgst = Math.round(igst * 100) / 100
+
+        if (sum !== roundedIgst) {
+          return `GST Mismatch: CGST (${cgst}%) + SGST (${sgst}%) = ${sum}%, which does not equal IGST (${igst}%). Under GST rules, CGST + SGST must equal IGST.`
+        }
+        if (Math.round(cgst * 100) !== Math.round(sgst * 100)) {
+          return `GST Mismatch: CGST (${cgst}%) and SGST (${sgst}%) must be equal (each exactly half of IGST).`
+        }
+        return null
+      }}
       columns={[
         { key: 'tax_code', label: 'Code' },
         { key: 'tax_name', label: 'Name' },

@@ -47,6 +47,7 @@ class BillableContractResponse(BaseModel):
     billed_qty: Decimal
     remaining_billable: Decimal
     tax_id: UUID
+    party_role: str | None = None
 
 
 class BillLineItemResponse(ORMModel):

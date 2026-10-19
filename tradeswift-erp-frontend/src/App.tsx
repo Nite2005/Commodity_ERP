@@ -21,7 +21,6 @@ import { BillsPage } from './pages/billing/BillsPage'
 import { BillGeneratePage } from './pages/billing/BillGeneratePage'
 import { BillDetailPage } from './pages/billing/BillDetailPage'
 import { UsersPage } from './pages/users/UsersPage'
-import { FinancialManagementPage } from './pages/finance/FinancialManagementPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { currentUser, loading } = useActiveUser()
@@ -99,7 +98,6 @@ export default function App() {
                   </AdminRoute>
                 }
               />
-              <Route path="financial-management" element={<FinancialManagementPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

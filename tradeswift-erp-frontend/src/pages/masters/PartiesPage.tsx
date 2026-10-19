@@ -10,6 +10,7 @@ import { DataTable } from '../../components/DataTable'
 import { Modal, FormField, inputClass, Alert } from '../../components/Modal'
 import { Badge } from '../../components/Badge'
 import { ChangeLogModal } from '../../components/ChangeLogModal'
+import { BulkImportModal } from '../../components/BulkImportModal'
 import { useActiveUser } from '../../context/UserContext'
 
 const customerTypes: { value: CustomerType; label: string }[] = [
@@ -45,6 +46,7 @@ export function PartiesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
+  const [importModalOpen, setImportModalOpen] = useState(false)
   const [editing, setEditing] = useState<Party | null>(null)
   const [form, setForm] = useState(emptyForm())
   const [saving, setSaving] = useState(false)
@@ -234,9 +236,20 @@ export function PartiesPage() {
               <RefreshCw size={16} className={loading ? 'animate-spin text-brand-600' : ''} />
             </Button>
             {isAdmin && (
-              <Button size="sm" onClick={openCreate} disabled={!company}>
-                <Plus size={16} /> Add Party
-              </Button>
+              <>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setImportModalOpen(true)}
+                  disabled={!company}
+                  title="Import parties from file (.xlsx, .csv, .json, etc.)"
+                >
+                  <Upload size={16} /> Import
+                </Button>
+                <Button size="sm" onClick={openCreate} disabled={!company}>
+                  <Plus size={16} /> Add Party
+                </Button>
+              </>
             )}
           </div>
         }
@@ -578,6 +591,15 @@ export function PartiesPage() {
         entityId={historyParty?.id ?? null}
         entityName={historyParty?.name ?? ''}
         entityType="PARTY"
+      />
+
+      <BulkImportModal
+        open={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        title="Import Parties"
+        entityType="Party"
+        onImport={(items) => mastersApi.parties.bulkCreate(company!.id, items)}
+        onSuccess={load}
       />
     </Card>
   )

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, RefreshCw, Eye, Pencil, Download, FileArchive, ArrowUpDown, Wallet } from 'lucide-react'
+import { Plus, RefreshCw, Eye, Pencil, Download, FileArchive, ArrowUpDown } from 'lucide-react'
 import { contractsApi, mastersApi, reportsApi, ApiClientError } from '../../api/client'
 import type { Contract, Party } from '../../types'
 import { useSelectedCompany } from '../../context/SelectedCompanyContext'
@@ -314,13 +314,6 @@ export function ContractsPage() {
                         <Pencil size={16} />
                       </Link>
                     )}
-                    <Link
-                      to={`/financial-management?contractId=${r.id}`}
-                      className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-emerald-600"
-                      title="Financial Management & Ledger"
-                    >
-                      <Wallet size={16} />
-                    </Link>
                     <Link
                       to={`/contracts/${r.id}`}
                       className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600"

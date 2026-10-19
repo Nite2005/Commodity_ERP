@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Plus, Pencil, Trash2, RefreshCw, ShieldCheck, History } from 'lucide-react'
+import { Plus, Pencil, Trash2, RefreshCw, ShieldCheck, History, Upload } from 'lucide-react'
 import { mastersApi, ApiClientError } from '../../api/client'
 import { ChangeLogModal } from '../../components/ChangeLogModal'
+import { BulkImportModal } from '../../components/BulkImportModal'
 import type {
   Commodity,
   CustomerType,
@@ -26,6 +27,7 @@ export function RatesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
+  const [importModalOpen, setImportModalOpen] = useState(false)
   const [editing, setEditing] = useState<RateMaster | null>(null)
   const [historyRate, setHistoryRate] = useState<RateMaster | null>(null)
   const [form, setForm] = useState({
@@ -101,6 +103,10 @@ export function RatesPage() {
   }
 
   const save = async () => {
+    if (!form.party_id) {
+      setError('Please select a party.')
+      return
+    }
     setSaving(true)
     setError('')
     const payload = {
@@ -156,9 +162,19 @@ export function RatesPage() {
               <RefreshCw size={16} className={loading ? 'animate-spin text-brand-600' : ''} />
             </Button>
             {isAdmin && (
-              <Button size="sm" onClick={openCreate}>
-                <Plus size={16} /> Add Billing Rate
-              </Button>
+              <>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setImportModalOpen(true)}
+                  title="Import billing rates from file (.xlsx, .csv, .json, etc.)"
+                >
+                  <Upload size={16} /> Import
+                </Button>
+                <Button size="sm" onClick={openCreate}>
+                  <Plus size={16} /> Add Billing Rate
+                </Button>
+              </>
             )}
           </div>
         }
@@ -308,12 +324,24 @@ export function RatesPage() {
             <select
               className={inputClass}
               value={form.party_id}
-              onChange={(e) => setForm({ ...form, party_id: e.target.value })}
+              onChange={(e) => {
+                const party = parties.find((p) => p.id === e.target.value)
+                setForm({
+                  ...form,
+                  party_id: e.target.value,
+                  customer_type:
+                    party?.customer_type === 'BUYER' ||
+                    party?.customer_type === 'SELLER' ||
+                    party?.customer_type === 'BOTH'
+                      ? party.customer_type
+                      : form.customer_type,
+                })
+              }}
             >
               <option value="">Select party…</option>
               {parties.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name} ({p.party_code})
+                  {p.name} {p.city ? `(${p.city})` : ''}
                 </option>
               ))}
             </select>
@@ -444,6 +472,15 @@ export function RatesPage() {
         entityId={historyRate?.id ?? null}
         entityName={`Rate ${historyRate?.rate_code ?? ''} (${partyMap[historyRate?.party_id ?? ''] ?? 'Party'})`}
         entityType="RATE_MASTER"
+      />
+
+      <BulkImportModal
+        open={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        title="Import Billing Rates"
+        entityType="Rate"
+        onImport={(items) => mastersApi.rates.bulkCreate(items)}
+        onSuccess={load}
       />
     </Card>
   )

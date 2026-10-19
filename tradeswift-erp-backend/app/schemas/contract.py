@@ -46,8 +46,6 @@ class ContractCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_contract(self):
-        if self.seller_id == self.buyer_id:
-            raise ValueError("Seller & Buyer cannot be the same party.")
         if self.despatch_to < self.despatch_from:
             raise ValueError("Despatch To Date must be on or after From Date.")
         if self.qty_high < self.qty_low:
@@ -116,6 +114,7 @@ class ContractResponse(ORMModel):
     final_qty: Decimal | None
     tolerance_percent: Decimal
     fulfilled_qty: Decimal
+    billed_qty: Decimal = Decimal("0")
     status: ContractStatus
     print_despatch_si: bool
     print_tr_final_docs: bool
@@ -127,6 +126,9 @@ class ContractResponse(ORMModel):
 
 class ContractDetailResponse(ContractResponse):
     company_name: str | None = None
+    company_address: str | None = None
+    company_gstin: str | None = None
+    company_phone: str | None = None
     seller_name: str | None = None
     buyer_name: str | None = None
     commodity_name: str | None = None

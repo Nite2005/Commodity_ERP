@@ -1,6 +1,6 @@
 import type { ApiError } from '../types'
 
-const BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000/api/v1'
+const BASE = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
 
 export class ApiClientError extends Error {
   status: number
@@ -113,6 +113,11 @@ export const mastersApi = {
       return api.get<import('../types').Party[]>(`/masters/parties?${search}`)
     },
     create: (data: object) => api.post<import('../types').Party>('/masters/parties', data),
+    bulkCreate: (companyId: string, items: any[]) =>
+      api.post<{ total: number; inserted: number; failed: number; errors: string[] }>(
+        `/masters/parties/bulk?company_id=${companyId}`,
+        items,
+      ),
     update: (id: string, data: object) =>
       api.put<import('../types').Party>(`/masters/parties/${id}`, data),
     remove: (id: string) => api.delete(`/masters/parties/${id}`),
@@ -195,6 +200,11 @@ export const mastersApi = {
   rates: {
     list: () => api.get<import('../types').RateMaster[]>('/masters/rates?active_only=false'),
     create: (data: object) => api.post<import('../types').RateMaster>('/masters/rates', data),
+    bulkCreate: (items: any[]) =>
+      api.post<{ total: number; inserted: number; failed: number; errors: string[] }>(
+        '/masters/rates/bulk',
+        items,
+      ),
     update: (id: string, data: object) =>
       api.put<import('../types').RateMaster>(`/masters/rates/${id}`, data),
     remove: (id: string) => api.delete(`/masters/rates/${id}`),

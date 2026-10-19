@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Download, Printer, Wallet, ArrowRight, FileText } from 'lucide-react'
+import { ArrowLeft, Download, Printer, FileText } from 'lucide-react'
 import { contractsApi, ApiClientError } from '../../api/client'
 import type { ContractDetail } from '../../types'
 import { Card, CardBody, CardHeader } from '../../components/Card'
@@ -47,11 +47,28 @@ export function ContractDetailPage() {
   }, [id])
 
   const handleClose = async () => {
-    if (!id) return
+    if (!id || !contract) return
+    const num = Number(finalQty)
+    if (isNaN(num) || num <= 0) {
+      setCloseMsg('Final Quantity must be a valid positive number greater than 0.')
+      return
+    }
+
+    const fulfilled = Number(contract.fulfilled_qty || 0)
+    const billed = Number(contract.billed_qty || 0)
+    const committed = Math.max(fulfilled, billed)
+    if (committed > 0 && num < committed) {
+      const type = fulfilled > 0 && billed > 0 ? 'delivered/billed' : fulfilled > 0 ? 'delivered' : 'billed'
+      setCloseMsg(
+        `Final Quantity (${num} ${contract.qty_unit}) cannot be less than already ${type} quantity (${committed} ${contract.qty_unit}).`
+      )
+      return
+    }
+
     setClosing(true)
     setCloseMsg('')
     try {
-      await contractsApi.close(id, Number(finalQty))
+      await contractsApi.close(id, num)
       setCloseMsg('Contract closed with final quantity set.')
       await load()
     } catch (e) {
@@ -88,17 +105,6 @@ export function ContractDetailPage() {
         </Link>
         <div className="flex flex-wrap items-center gap-2">
           {error && <span className="text-sm text-red-600">{error}</span>}
-          {id && (
-            <Link to={`/financial-management?contractId=${id}`}>
-              <Button
-                size="sm"
-                variant="secondary"
-                className="text-emerald-700 hover:bg-emerald-50 border-emerald-200"
-              >
-                <Wallet size={16} /> Financial Management & Ledger
-              </Button>
-            </Link>
-          )}
           <Button variant="secondary" size="sm" onClick={handleDownload} disabled={downloading}>
             <Download size={16} />
             {downloading ? 'Downloading…' : 'Download Report'}
@@ -156,6 +162,14 @@ export function ContractDetailPage() {
                       : '—'
                   }
                 />
+                <Row
+                  label="Fulfilled Qty"
+                  value={`${contract.fulfilled_qty ?? 0} ${contract.qty_unit}`}
+                />
+                <Row
+                  label="Billed Qty"
+                  value={`${contract.billed_qty ?? 0} ${contract.qty_unit}`}
+                />
                 <Row label="Rate" value={String(contract.rate)} />
                 <Row label="Tax" value={contract.tax_name} />
                 <Row label="Payment Term" value={contract.payment_term_name} />
@@ -179,10 +193,18 @@ export function ContractDetailPage() {
             <Card>
               <CardHeader title="Contract Closure" subtitle="Final qty for billing" />
               <CardBody className="space-y-4">
-                <FormField label="Final Quantity" hint="Defaults to Qty High if not set">
+                <FormField
+                  label="Final Quantity"
+                  hint={
+                    Number(contract.fulfilled_qty || 0) > 0 || Number(contract.billed_qty || 0) > 0
+                      ? `Must be at least ${Math.max(Number(contract.fulfilled_qty || 0), Number(contract.billed_qty || 0))} ${contract.qty_unit} (already delivered/billed)`
+                      : 'Defaults to Qty High if not set'
+                  }
+                >
                   <input
                     type="number"
                     step="0.01"
+                    min={Math.max(Number(contract.fulfilled_qty || 0), Number(contract.billed_qty || 0), 0.01)}
                     className={inputClass}
                     value={finalQty}
                     onChange={(e) => setFinalQty(e.target.value)}
@@ -222,36 +244,6 @@ export function ContractDetailPage() {
             )}
           </CardBody>
         </Card>
-
-        {/* Dedicated Financial Management Banner */}
-        <div className="mt-6 rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50/80 via-teal-50/50 to-white p-6 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="flex items-start gap-3.5">
-            <div className="p-3 rounded-xl bg-emerald-100 text-emerald-700 shrink-0 mt-0.5">
-              <Wallet size={24} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-slate-900">
-                  Financial Management, Party Ledger & Deal Reports
-                </h3>
-                <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                  SEPARATE PAGE
-                </span>
-              </div>
-              <p className="text-xs text-slate-600 mt-1 max-w-2xl leading-relaxed">
-                The Integrated Party Ledger (real-time exposure, credit limit tracking) and counterparty hisaab are managed on the dedicated <strong>Financial Management</strong> page.
-              </p>
-            </div>
-          </div>
-
-          <Link to={`/financial-management?contractId=${contract.id}`} className="shrink-0">
-            <Button className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs">
-              <Wallet size={15} />
-              <span>Open in Financial Management</span>
-              <ArrowRight size={15} />
-            </Button>
-          </Link>
-        </div>
       </div>
 
       {/* Formal Contract Report rendered exclusively during Print */}

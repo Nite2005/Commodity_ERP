@@ -10,8 +10,10 @@ def round_money(value: Decimal) -> Decimal:
 
 class TaxEngine:
     @staticmethod
-    def get_supply_type(seller_state: str, buyer_state: str) -> SupplyType:
-        if seller_state.strip().upper() == buyer_state.strip().upper():
+    def get_supply_type(seller_state: str | None, buyer_state: str | None) -> SupplyType:
+        s1 = (seller_state or "").strip().upper()
+        s2 = (buyer_state or "").strip().upper()
+        if s1 and s2 and s1 == s2:
             return SupplyType.INTRA_STATE
         return SupplyType.INTER_STATE
 

@@ -29,6 +29,8 @@ interface MasterCrudProps<T extends { id: string; is_active: boolean }> {
   deleteFn: (id: string) => Promise<void>
   toForm?: (row: T) => Record<string, string>
   fromForm?: (form: Record<string, string>) => Record<string, unknown>
+  validate?: (form: Record<string, string>) => string | null
+  onFieldChange?: (name: string, value: string, form: Record<string, string>) => Record<string, string>
 }
 
 export function MasterCrud<T extends { id: string; is_active: boolean }>({
@@ -42,6 +44,8 @@ export function MasterCrud<T extends { id: string; is_active: boolean }>({
   deleteFn,
   toForm,
   fromForm,
+  validate,
+  onFieldChange,
 }: MasterCrudProps<T>) {
   const { isAdmin } = useActiveUser()
   const [rows, setRows] = useState<T[]>([])
@@ -80,9 +84,24 @@ export function MasterCrud<T extends { id: string; is_active: boolean }>({
     setModalOpen(true)
   }
 
+  const handleInputChange = (name: string, value: string) => {
+    if (onFieldChange) {
+      setForm(onFieldChange(name, value, form))
+    } else {
+      setForm({ ...form, [name]: value })
+    }
+  }
+
   const handleSave = async () => {
-    setSaving(true)
     setError('')
+    if (validate) {
+      const valError = validate(form)
+      if (valError) {
+        setError(valError)
+        return
+      }
+    }
+    setSaving(true)
     try {
       const payload = fromForm ? fromForm(form) : form
       if (editing) {
@@ -96,7 +115,7 @@ export function MasterCrud<T extends { id: string; is_active: boolean }>({
       setModalOpen(false)
       await load()
     } catch (e) {
-      setError(e instanceof ApiClientError ? e.message : 'Save failed')
+      setError(e instanceof ApiClientError ? e.message : (e instanceof Error ? e.message : 'Save failed'))
     } finally {
       setSaving(false)
     }
@@ -191,14 +210,14 @@ export function MasterCrud<T extends { id: string; is_active: boolean }>({
                 <textarea
                   className={`${inputClass} min-h-[80px]`}
                   value={form[f.name] ?? ''}
-                  onChange={(e) => setForm({ ...form, [f.name]: e.target.value })}
+                  onChange={(e) => handleInputChange(f.name, e.target.value)}
                   placeholder={f.placeholder}
                 />
               ) : f.type === 'select' ? (
                 <select
                   className={inputClass}
                   value={form[f.name] ?? ''}
-                  onChange={(e) => setForm({ ...form, [f.name]: e.target.value })}
+                  onChange={(e) => handleInputChange(f.name, e.target.value)}
                 >
                   <option value="">Select…</option>
                   {f.options?.map((o) => (
@@ -213,7 +232,7 @@ export function MasterCrud<T extends { id: string; is_active: boolean }>({
                   step={f.step}
                   className={inputClass}
                   value={form[f.name] ?? ''}
-                  onChange={(e) => setForm({ ...form, [f.name]: e.target.value })}
+                  onChange={(e) => handleInputChange(f.name, e.target.value)}
                   placeholder={f.placeholder}
                 />
               )}

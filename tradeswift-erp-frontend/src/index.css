@@ -45,7 +45,6 @@ button {
   }
 
   aside,
-  header,
   .print\:hidden {
     display: none !important;
   }
@@ -67,5 +66,12 @@ button {
   #contract-report {
     max-width: none;
     box-shadow: none;
+  }
+
+  #contract-report header,
+  .print-only header {
+    display: block !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 }

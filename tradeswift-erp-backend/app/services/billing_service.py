@@ -2,6 +2,7 @@ from datetime import date
 from decimal import Decimal
 
 from fastapi import HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.models import Bill, BillLineItem, Contract, Despatch, Party, Tax
@@ -28,6 +29,7 @@ class BillingService:
             raise HTTPException(status_code=400, detail="Party not found or inactive.")
 
         party_vars = uuid_variants(party_id)
+        party_vars_set = set(party_vars)
         q = (
             db.query(Contract)
             .options(
@@ -51,10 +53,26 @@ class BillingService:
         rows: list[dict] = []
         for contract in q.order_by(Contract.contract_date.desc(), Contract.contract_no.desc()):
             billing_qty = ContractService.billing_quantity(contract)
-            billed = Decimal(str(contract.billed_qty or 0))
+            # Calculate quantity already billed specifically to this party for this contract
+            billed_for_party = (
+                db.query(func.coalesce(func.sum(BillLineItem.quantity), 0))
+                .join(Bill, Bill.id == BillLineItem.bill_id)
+                .filter(
+                    BillLineItem.contract_id.in_(uuid_variants(contract.id)),
+                    Bill.party_id.in_(party_vars),
+                )
+                .scalar()
+            ) or Decimal("0")
+
+            billed = Decimal(str(billed_for_party))
             remaining = max(Decimal("0"), billing_qty - billed)
             if remaining <= 0:
                 continue
+
+            contract_seller_vars = set(uuid_variants(contract.seller_id))
+            is_seller = bool(party_vars_set.intersection(contract_seller_vars))
+            party_role = "Seller" if is_seller else "Buyer"
+
             rows.append(
                 {
                     "id": contract.id,
@@ -75,6 +93,7 @@ class BillingService:
                     "billed_qty": billed,
                     "remaining_billable": remaining,
                     "tax_id": contract.tax_id,
+                    "party_role": party_role,
                 }
             )
         return rows
@@ -149,7 +168,18 @@ class BillingService:
                 )
 
             billing_qty = ContractService.billing_quantity(contract)
-            billed = Decimal(str(contract.billed_qty or 0))
+            party_vars_for_contract = set(uuid_variants(payload.party_id))
+            billed_for_party = (
+                db.query(func.coalesce(func.sum(BillLineItem.quantity), 0))
+                .join(Bill, Bill.id == BillLineItem.bill_id)
+                .filter(
+                    BillLineItem.contract_id.in_(uuid_variants(contract.id)),
+                    Bill.party_id.in_(party_vars_for_contract),
+                )
+                .scalar()
+            ) or Decimal("0")
+
+            billed = Decimal(str(billed_for_party))
             remaining = max(Decimal("0"), billing_qty - billed)
             qty = Decimal(str(line.quantity))
             if qty > remaining:
@@ -157,7 +187,7 @@ class BillingService:
                     status_code=400,
                     detail=(
                         f"Contract {contract.contract_no}: qty {qty} exceeds "
-                        f"remaining billable {remaining}."
+                        f"remaining billable {remaining} for {party.name}."
                     ),
                 )
 
@@ -210,12 +240,16 @@ class BillingService:
             )
 
         assert first_contract is not None
+        company = first_contract.company or party.company
+        company_state = getattr(company, "state", None) or "Rajasthan"
+        party_state = party.state or "Rajasthan"
+
         supply_type = TaxEngine.get_supply_type(
-            first_contract.seller.state,
-            first_contract.buyer.state,
+            company_state,
+            party_state,
         )
-        tax_amounts = TaxEngine.calculate(base_amount, tax, supply_type)
-        gross_amount = TaxEngine.gross(base_amount, tax_amounts)
+        tax_amounts = TaxEngine.calculate(brokerage_amount, tax, supply_type)
+        gross_amount = TaxEngine.gross(brokerage_amount, tax_amounts)
 
         bill = Bill(
             bill_no=SequenceService.next_code(db, "BILL"),
@@ -246,12 +280,37 @@ class BillingService:
                     line_base_amount=item["line_base_amount"],
                 )
             )
-            contract = item["contract"]
-            contract.billed_qty = Decimal(str(contract.billed_qty or 0)) + item["quantity"]
             despatch = item["despatch"]
             if despatch is not None:
                 despatch.billing_status = BillingStatus.BILLED
                 despatch.bill_id = bill.id
+
+        db.flush()
+
+        # Update contract.billed_qty to reflect the maximum billed volume across counterparties
+        for item in line_data:
+            contract = item["contract"]
+            seller_vars = set(uuid_variants(contract.seller_id))
+            buyer_vars = set(uuid_variants(contract.buyer_id))
+            seller_billed = (
+                db.query(func.coalesce(func.sum(BillLineItem.quantity), 0))
+                .join(Bill, Bill.id == BillLineItem.bill_id)
+                .filter(
+                    BillLineItem.contract_id.in_(uuid_variants(contract.id)),
+                    Bill.party_id.in_(seller_vars),
+                )
+                .scalar()
+            ) or Decimal("0")
+            buyer_billed = (
+                db.query(func.coalesce(func.sum(BillLineItem.quantity), 0))
+                .join(Bill, Bill.id == BillLineItem.bill_id)
+                .filter(
+                    BillLineItem.contract_id.in_(uuid_variants(contract.id)),
+                    Bill.party_id.in_(buyer_vars),
+                )
+                .scalar()
+            ) or Decimal("0")
+            contract.billed_qty = max(Decimal(str(seller_billed)), Decimal(str(buyer_billed)))
 
         db.commit()
         db.refresh(bill)

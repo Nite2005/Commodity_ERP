@@ -253,10 +253,11 @@ export function BillGeneratePage() {
                     <tr>
                       <th className="px-4 py-3" />
                       <th className="px-4 py-3">Contract</th>
+                      <th className="px-4 py-3">Party Role</th>
                       <th className="px-4 py-3">Date</th>
                       <th className="px-4 py-3">Status</th>
                       <th className="px-4 py-3">Commodity</th>
-                      <th className="px-4 py-3">Billing Qty</th>
+                      <th className="px-4 py-3">Contract Qty</th>
                       <th className="px-4 py-3">Already Billed</th>
                       <th className="px-4 py-3">Bill Qty</th>
                       <th className="px-4 py-3">Rate</th>
@@ -278,13 +279,26 @@ export function BillGeneratePage() {
                             />
                           </td>
                           <td className="px-4 py-3 font-medium">#{r.contract_no}</td>
+                          <td className="px-4 py-3">
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${
+                                r.party_role === 'Seller'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-blue-100 text-blue-800'
+                              }`}
+                            >
+                              {r.party_role || 'Party'}
+                            </span>
+                          </td>
                           <td className="px-4 py-3">{r.contract_date}</td>
                           <td className="px-4 py-3">{r.status}</td>
                           <td className="px-4 py-3">{r.commodity_short_name ?? '—'}</td>
                           <td className="px-4 py-3">
                             {r.billing_qty} {r.qty_unit}
                           </td>
-                          <td className="px-4 py-3">{r.billed_qty}</td>
+                          <td className="px-4 py-3">
+                            {r.billed_qty} {r.qty_unit}
+                          </td>
                           <td className="px-4 py-3">
                             <input
                               type="number"

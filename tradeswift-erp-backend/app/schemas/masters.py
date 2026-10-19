@@ -76,6 +76,20 @@ class TaxCreate(BaseModel):
     cgst_percent: Decimal = Field(ge=0, le=100)
     sgst_percent: Decimal = Field(ge=0, le=100)
 
+    @model_validator(mode="after")
+    def validate_gst_split(self):
+        if (self.cgst_percent + self.sgst_percent) != self.igst_percent:
+            raise ValueError(
+                f"GST percentage mismatch: CGST ({self.cgst_percent}%) + SGST ({self.sgst_percent}%) "
+                f"must equal IGST ({self.igst_percent}%)."
+            )
+        if self.cgst_percent != self.sgst_percent:
+            raise ValueError(
+                f"GST percentage mismatch: CGST ({self.cgst_percent}%) and SGST ({self.sgst_percent}%) "
+                f"must be equal (each exactly half of IGST)."
+            )
+        return self
+
 
 class TaxUpdate(BaseModel):
     tax_name: str | None = Field(default=None, max_length=50)
@@ -367,3 +381,46 @@ class RateMasterResponse(ORMModel):
     has_pending_approval: bool = False
     is_active: bool
     created_at: datetime
+
+
+class BulkImportResult(BaseModel):
+    total: int
+    inserted: int
+    failed: int
+    errors: list[str] = []
+
+
+class PartyBulkItem(BaseModel):
+    name: str
+    short_name: str | None = None
+    customer_type: CustomerType | None = None
+    gst_tin: str | None = None
+    address_line: str | None = "N/A"
+    city: str | None = "N/A"
+    state: str | None = "N/A"
+    pincode: str | None = "000000"
+    mobile: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    contact_name: str | None = None
+    designation: str | None = None
+    bank_name: str | None = None
+    account_no: str | None = None
+    ifsc_code: str | None = None
+    credit_limit: Decimal | None = Decimal("5000000.00")
+
+
+class RateMasterBulkItem(BaseModel):
+    party_id: str | None = None
+    party_name: str | None = None
+    party_code: str | None = None
+    commodity_id: str | None = None
+    commodity_name: str | None = None
+    customer_type: CustomerType | None = None
+    rate_type: RateType | None = RateType.FIXED
+    rate: Decimal
+    unit: QtyUnit | None = QtyUnit.MT
+    currency: Currency | None = Currency.INR
+    brokerage_type: RateType | None = RateType.FIXED
+    brokerage: Decimal | None = Decimal(0)
+

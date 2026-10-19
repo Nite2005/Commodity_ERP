@@ -18,7 +18,6 @@ import {
   Shield,
   User,
   LogOut,
-  Wallet,
 } from 'lucide-react'
 import { useSelectedCompany } from '../context/SelectedCompanyContext'
 import { useActiveUser } from '../context/UserContext'
@@ -38,7 +37,6 @@ const nav = [
   { section: 'Transactions' },
   { to: '/contracts', label: 'Contracts', icon: FileText },
   { to: '/billing', label: 'Bills', icon: Receipt },
-  { to: '/financial-management', label: 'Financial Management', icon: Wallet },
   { section: 'Governance' },
   { to: '/approvals', label: 'Approvals', icon: ShieldCheck },
   { to: '/users', label: 'User Management', icon: Users, adminOnly: true },
@@ -122,7 +120,7 @@ export function Layout() {
       </aside>
 
       <main className="ml-64 flex min-h-screen flex-1 flex-col">
-        <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 px-8 py-3.5 backdrop-blur">
+        <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 px-8 py-3.5 backdrop-blur print:hidden">
           <div className="flex items-center justify-between gap-4">
             <div>
               <h1 className="text-xl font-semibold text-slate-900">Tradeswift ERP</h1>
