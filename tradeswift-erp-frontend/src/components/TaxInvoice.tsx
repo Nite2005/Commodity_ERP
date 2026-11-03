@@ -90,7 +90,6 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
   const hasSellerLines = sellerLines.length > 0
   const hasBuyerLines = buyerLines.length > 0
 
-  const totalBags = sellerSubtotal.bags + buyerSubtotal.bags
   const totalWeight = sellerSubtotal.weight + buyerSubtotal.weight
   const hasLineItems = hasSellerLines || hasBuyerLines
   const totalBrokerage = hasLineItems
@@ -110,19 +109,23 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
   const cgstRate = Number(bill.cgst_percent ?? (!isInterState ? (igstRate ? igstRate / 2 : 9) : 0))
   const sgstRate = Number(bill.sgst_percent ?? (!isInterState ? (igstRate ? igstRate / 2 : 9) : 0))
 
-  let igstAmount = 0
-  let cgstAmount = 0
-  let sgstAmount = 0
+  let igstAmount = Number(bill.igst_amount || 0)
+  let cgstAmount = Number(bill.cgst_amount || 0)
+  let sgstAmount = Number(bill.sgst_amount || 0)
 
-  if (isInterState && igstRate > 0) {
-    igstAmount = Math.round(totalBrokerage * igstRate) / 100
-  } else if (!isInterState) {
-    cgstAmount = Math.round(totalBrokerage * cgstRate) / 100
-    sgstAmount = Math.round(totalBrokerage * sgstRate) / 100
+  // Recalculate only if bill amounts are completely empty
+  if (!igstAmount && !cgstAmount && !sgstAmount) {
+    if (isInterState && igstRate > 0) {
+      igstAmount = Math.round(totalBrokerage * igstRate) / 100
+    } else if (!isInterState) {
+      cgstAmount = Math.round(totalBrokerage * cgstRate) / 100
+      sgstAmount = Math.round(totalBrokerage * sgstRate) / 100
+    }
   }
 
   const taxTotal = igstAmount + cgstAmount + sgstAmount
-  const netAmount = Math.round((totalBrokerage + taxTotal) * 100) / 100
+  const grossWithTax = totalBrokerage + taxTotal
+  const netAmount = bill.gross_amount != null ? Number(bill.gross_amount) : Math.round(grossWithTax)
 
   const renderSectionRows = (items: BillLineItem[], isSellerSection: boolean) => {
     return items.map((line, idx) => {
@@ -144,11 +147,10 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
           <td className="py-0.5 px-1 whitespace-nowrap font-medium">
             {line.contract_no ? `${line.contract_no}` : '—'}
           </td>
-          <td className="py-0.5 px-1 uppercase font-medium truncate max-w-[210px]" title={counterparty}>
+          <td className="py-0.5 px-1 uppercase font-medium truncate max-w-[240px] leading-normal" title={counterparty}>
             {counterparty}
           </td>
           <td className="py-0.5 px-1 whitespace-nowrap">{commodity}</td>
-          <td className="py-0.5 px-1 text-right whitespace-nowrap">{line.bags ?? '0'}</td>
           <td className="py-0.5 px-1 text-right whitespace-nowrap font-medium">
             {formatNum(line.quantity, 3)} {weightUnit}
           </td>
@@ -262,7 +264,6 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
               <th className="py-0 px-1 text-left"></th>
               <th className="py-0 px-1 text-left"></th>
               <th className="py-0 px-1 text-left"></th>
-              <th className="py-0 px-1 text-right"></th>
               <th className="py-0 px-1 text-right">Sauda</th>
               <th className="py-0 px-1 text-right">Sauda</th>
               <th className="py-0 px-1 text-right">Brokerage</th>
@@ -273,14 +274,13 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
               <th className="pb-1 px-1 text-left">Sauda#</th>
               <th className="pb-1 px-1 text-left">Seller/Buyer</th>
               <th className="pb-1 px-1 text-left">Commodity</th>
-              <th className="pb-1 px-1 text-right">Bags</th>
               <th className="pb-1 px-1 text-right">Weight</th>
               <th className="pb-1 px-1 text-right">Rate</th>
               <th className="pb-1 px-1 text-right">Rate</th>
               <th className="pb-1 px-1 text-right">Amount</th>
             </tr>
             <tr>
-              <td colSpan={9} className="py-0">
+              <td colSpan={8} className="py-0">
                 <div className="border-t border-dashed border-black w-full" />
               </td>
             </tr>
@@ -292,7 +292,7 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
               <>
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={8}
                     className="pt-2 pb-0.5 px-1 font-bold tracking-wide text-black"
                   >
                     ** Sellers Brokerage **
@@ -302,7 +302,6 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
                 {/* Dashed line above subtotal */}
                 <tr>
                   <td colSpan={4}></td>
-                  <td className="text-right px-1 text-[10px]">------</td>
                   <td className="text-right px-1 text-[10px]">------------</td>
                   <td colSpan={2}></td>
                   <td className="text-right px-1 text-[10px]">---------</td>
@@ -310,7 +309,6 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
                 {/* Subtotal row */}
                 <tr className="font-semibold text-black">
                   <td colSpan={4}></td>
-                  <td className="py-0.5 px-1 text-right">{sellerSubtotal.bags}</td>
                   <td className="py-0.5 px-1 text-right">
                     {formatNum(sellerSubtotal.weight, 3)}
                   </td>
@@ -327,7 +325,7 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
               <>
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={8}
                     className="pt-2 pb-0.5 px-1 font-bold tracking-wide text-black"
                   >
                     ** Buyer's Brokerage **
@@ -337,7 +335,6 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
                 {/* Dashed line above subtotal */}
                 <tr>
                   <td colSpan={4}></td>
-                  <td className="text-right px-1 text-[10px]">------</td>
                   <td className="text-right px-1 text-[10px]">------------</td>
                   <td colSpan={2}></td>
                   <td className="text-right px-1 text-[10px]">---------</td>
@@ -345,7 +342,6 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
                 {/* Subtotal row */}
                 <tr className="font-semibold text-black">
                   <td colSpan={4}></td>
-                  <td className="py-0.5 px-1 text-right">{buyerSubtotal.bags}</td>
                   <td className="py-0.5 px-1 text-right">
                     {formatNum(buyerSubtotal.weight, 3)}
                   </td>
@@ -359,7 +355,7 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
 
             {!hasSellerLines && !hasBuyerLines && (
               <tr>
-                <td colSpan={9} className="py-4 text-center text-slate-500">
+                <td colSpan={8} className="py-4 text-center text-slate-500">
                   No brokerage line items recorded.
                 </td>
               </tr>
@@ -369,7 +365,7 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
           {/* TABLE TOTAL ROW */}
           <tfoot>
             <tr>
-              <td colSpan={9} className="py-1">
+              <td colSpan={8} className="py-1">
                 <div className="border-t border-dashed border-black w-full" />
               </td>
             </tr>
@@ -377,7 +373,6 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
               <td colSpan={4} className="py-0.5 px-1">
                 Total
               </td>
-              <td className="py-0.5 px-1 text-right">{totalBags}</td>
               <td className="py-0.5 px-1 text-right font-bold">
                 {formatNum(totalWeight, 3)}
               </td>
@@ -389,7 +384,7 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
               </td>
             </tr>
             <tr>
-              <td colSpan={9} className="py-1">
+              <td colSpan={8} className="py-1">
                 <div className="border-t border-dashed border-black w-full" />
               </td>
             </tr>

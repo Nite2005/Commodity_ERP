@@ -260,7 +260,8 @@ export function BillGeneratePage() {
                       <th className="px-4 py-3">Contract Qty</th>
                       <th className="px-4 py-3">Already Billed</th>
                       <th className="px-4 py-3">Bill Qty</th>
-                      <th className="px-4 py-3">Rate</th>
+                      <th className="px-4 py-3">Billing Rate</th>
+                      <th className="px-4 py-3">Sauda Rate</th>
                       <th className="px-4 py-3">Base</th>
                     </tr>
                   </thead>
@@ -312,6 +313,13 @@ export function BillGeneratePage() {
                                 setQtyById((prev) => ({ ...prev, [r.id]: e.target.value }))
                               }
                             />
+                          </td>
+                          <td className="px-4 py-3 font-semibold text-brand-700">
+                            {r.broker_rate != null && Number(r.broker_rate) > 0
+                              ? r.broker_rate_type === 'PERCENTAGE'
+                                ? `${r.broker_rate}%`
+                                : `₹${r.broker_rate} / ${r.qty_unit}`
+                              : '0.00'}
                           </td>
                           <td className="px-4 py-3">{r.rate}</td>
                           <td className="px-4 py-3">

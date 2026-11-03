@@ -94,7 +94,6 @@ export function ContractReport({ contract }: ContractReportProps) {
             </h2>
             <Field label="Commodity" value={contract.commodity_name} />
             <Field label="Short Name" value={contract.commodity_short_name} />
-            <Field label="Packing" value={contract.packing} />
             {contract.quality_allowance && (
               <Field label="Quality Allowance" value={contract.quality_allowance} />
             )}
@@ -120,16 +119,6 @@ export function ContractReport({ contract }: ContractReportProps) {
             <Field
               label="Despatch Period"
               value={`${formatDateDmy(contract.despatch_from)} → ${formatDateDmy(contract.despatch_to)}`}
-            />
-            <Field
-              label="Broker"
-              value={
-                contract.broker_name
-                  ? contract.broker_rate_type === 'PERCENTAGE'
-                    ? `${contract.broker_name} @ ${contract.broker_rate}% of value`
-                    : `${contract.broker_name} @ ₹${contract.broker_rate} / ${contract.qty_unit || 'MT'}`
-                  : null
-              }
             />
           </section>
         </div>

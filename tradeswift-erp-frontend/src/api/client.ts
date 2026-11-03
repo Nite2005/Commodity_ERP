@@ -293,11 +293,11 @@ export const reportsApi = {
   getPartyLedger: (partyId: string) =>
     api.get<import('../types').PartyLedgerResponse>(`/reports/party-ledger/${partyId}`),
   downloadContractRegister: (params?: Record<string, string | string[] | undefined>) => {
-    const qs = params ? '?' + toQueryString(params) : ''
+    const qs = toQueryString(params)
     return downloadFile(`/reports/contract-register/export${qs}`, 'contract-register.csv')
   },
   downloadSalesRegister: (params?: Record<string, string | string[] | undefined>) => {
-    const qs = params ? '?' + toQueryString(params) : ''
+    const qs = toQueryString(params)
     return downloadFile(`/reports/sales-register/export${qs}`, 'bills-report.csv')
   },
 }

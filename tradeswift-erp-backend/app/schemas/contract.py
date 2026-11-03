@@ -28,7 +28,7 @@ class ContractCreate(BaseModel):
     commodity_id: UUID
     quality_allowance: str | None = Field(default=None, max_length=1000)
     notes: str | None = None
-    packing: str = Field(max_length=100)
+    packing: str = Field(default="NA", max_length=100)
     qty_low: Decimal = Field(gt=0)
     qty_high: Decimal = Field(gt=0)
     qty_unit: QtyUnit
@@ -39,8 +39,8 @@ class ContractCreate(BaseModel):
     weightment_unit_id: UUID | None = None
     despatch_from: date
     despatch_to: date
-    broker_id: UUID
-    broker_rate: Decimal = Field(ge=0)
+    broker_id: UUID | None = None
+    broker_rate: Decimal = Field(default=Decimal("0"), ge=0)
     broker_rate_type: RateType = RateType.FIXED
     print_options: PrintOptions | None = None
 
@@ -97,7 +97,7 @@ class ContractResponse(ORMModel):
     commodity_id: UUID
     quality_allowance: str | None
     notes: str | None = None
-    packing: str
+    packing: str | None = None
     qty_low: Decimal
     qty_high: Decimal
     qty_unit: QtyUnit
@@ -108,8 +108,8 @@ class ContractResponse(ORMModel):
     weightment_unit_id: UUID | None
     despatch_from: date
     despatch_to: date
-    broker_id: UUID
-    broker_rate: Decimal
+    broker_id: UUID | None = None
+    broker_rate: Decimal | None = None
     broker_rate_type: RateType = RateType.FIXED
     final_qty: Decimal | None
     tolerance_percent: Decimal

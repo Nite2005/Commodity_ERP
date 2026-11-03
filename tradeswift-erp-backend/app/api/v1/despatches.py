@@ -17,7 +17,7 @@ from app.schemas.despatch import (
     UnbilledDespatchResponse,
 )
 from app.services.despatch_service import DespatchService
-from app.utils.ids import as_db_id, db_get
+from app.utils.ids import as_db_id, db_get, uuid_variants
 
 router = APIRouter(prefix="/despatches", tags=["Despatches"])
 
@@ -30,7 +30,10 @@ def _load_despatch(db: Session, despatch_id: str) -> Despatch:
             joinedload(Despatch.contract).joinedload(Contract.buyer),
             joinedload(Despatch.contract).joinedload(Contract.commodity),
         )
-        .filter(Despatch.id == as_db_id(despatch_id))
+        .filter(
+            (Despatch.id.in_(uuid_variants(despatch_id)))
+            | (Despatch.despatch_no == despatch_id)
+        )
         .first()
     )
     if not row:
@@ -51,7 +54,7 @@ def list_despatches(
     if active_only:
         q = q.filter(Despatch.is_active.is_(True))
     if contract_id:
-        q = q.filter(Despatch.contract_id == as_db_id(contract_id))
+        q = q.filter(Despatch.contract_id.in_(uuid_variants(contract_id)))
     if billing_status:
         q = q.filter(Despatch.billing_status == billing_status)
     if date_from:
@@ -119,7 +122,7 @@ def deactivate_despatch(despatch_id: str, db: Session = Depends(get_db)):
 
     contract = (
         db.query(Contract)
-        .filter(Contract.id == row.contract_id)
+        .filter(Contract.id.in_(uuid_variants(row.contract_id)))
         .with_for_update()
         .first()
     )

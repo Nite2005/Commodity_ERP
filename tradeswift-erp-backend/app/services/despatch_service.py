@@ -11,7 +11,7 @@ from app.models.enums import BillingStatus, ContractStatus
 from app.schemas.despatch import DespatchCreate
 from app.services.contract_service import ContractService
 from app.services.sequence_service import SequenceService
-from app.utils.ids import as_db_id, db_get
+from app.utils.ids import as_db_id, db_get, uuid_variants
 
 
 class DespatchService:
@@ -41,7 +41,7 @@ class DespatchService:
     def create(cls, db: Session, payload: DespatchCreate) -> Despatch:
         contract = (
             db.query(Contract)
-            .filter(Contract.id == as_db_id(payload.contract_id))
+            .filter(Contract.id.in_(uuid_variants(payload.contract_id)))
             .with_for_update()
             .first()
         )
@@ -72,7 +72,7 @@ class DespatchService:
         row = Despatch(
             despatch_no=SequenceService.next_code(db, "DESPATCH"),
             despatch_date=payload.despatch_date,
-            contract_id=as_db_id(payload.contract_id),
+            contract_id=contract.id,
             bags=payload.bags,
             quantity=payload.quantity,
             delivery_type=payload.delivery_type.strip().upper() if payload.delivery_type else None,
@@ -108,7 +108,7 @@ class DespatchService:
         if not party:
             raise HTTPException(status_code=404, detail="Party not found")
 
-        party_key = as_db_id(party_id)
+        party_keys = uuid_variants(party_id)
         return (
             db.query(Despatch)
             .join(Contract, Despatch.contract_id == Contract.id)
@@ -118,7 +118,7 @@ class DespatchService:
                 Despatch.billing_status == BillingStatus.UNBILLED,
                 Despatch.despatch_date >= from_date,
                 Despatch.despatch_date <= to_date,
-                (Contract.seller_id == party_key) | (Contract.buyer_id == party_key),
+                (Contract.seller_id.in_(party_keys)) | (Contract.buyer_id.in_(party_keys)),
             )
             .order_by(Despatch.despatch_date.desc(), Despatch.despatch_no.desc())
             .all()

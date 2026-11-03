@@ -79,7 +79,7 @@ from app.schemas.masters import (
     UnitUpdate,
 )
 from app.services.sequence_service import SequenceService
-from app.utils.ids import as_db_id, db_get
+from app.utils.ids import as_db_id, db_get, uuid_variants
 
 router = APIRouter(prefix="/masters", tags=["Masters"])
 
@@ -414,7 +414,7 @@ def list_parties(
         query = query.filter(Party.is_active.is_(True))
     if company_id:
         query = query.filter(
-            (Party.company_id == as_db_id(company_id)) | (Party.company_id.is_(None))
+            (Party.company_id.in_(uuid_variants(company_id))) | (Party.company_id.is_(None))
         )
     if q:
         like = f"%{q}%"
@@ -438,9 +438,10 @@ def list_parties(
 
 @router.post("/parties", response_model=PartyResponse, status_code=201)
 def create_party(payload: PartyCreate, db: Session = Depends(get_db)):
-    if not db_get(db, Company, payload.company_id):
+    comp = db_get(db, Company, payload.company_id)
+    if not comp:
         raise HTTPException(status_code=400, detail="Company not found.")
-    cid = as_db_id(payload.company_id)
+    cid = comp.id
     if db.query(Party).filter(Party.company_id == cid, Party.name == payload.name).first():
         raise HTTPException(status_code=400, detail="Party name already exists for this company.")
     if payload.customer_type == CustomerType.REGISTERED and not payload.gst_tin:
@@ -460,9 +461,10 @@ def bulk_create_parties(
     company_id: str = Query(...),
     db: Session = Depends(get_db),
 ):
-    cid = as_db_id(company_id)
-    if not db_get(db, Company, cid):
+    comp = db_get(db, Company, company_id)
+    if not comp:
         raise HTTPException(status_code=400, detail="Company not found.")
+    cid = comp.id
 
     inserted = 0
     errors = []
@@ -552,9 +554,10 @@ def update_party(
         raise HTTPException(status_code=404, detail="Party not found")
     data = payload.model_dump(exclude_unset=True)
     if "company_id" in data:
-        if not db_get(db, Company, data["company_id"]):
+        comp = db_get(db, Company, data["company_id"])
+        if not comp:
             raise HTTPException(status_code=400, detail="Company not found.")
-        data["company_id"] = as_db_id(data["company_id"])
+        data["company_id"] = comp.id
     company_id = data.get("company_id", row.company_id)
     name = data.get("name", row.name)
     if company_id and name:
@@ -922,7 +925,7 @@ def list_contacts(
     if active_only:
         q = q.filter(Contact.is_active.is_(True))
     if party_id:
-        q = q.filter(Contact.party_id == party_id)
+        q = q.filter(Contact.party_id.in_(uuid_variants(party_id)))
     return q.order_by(Contact.contact_name).all()
 
 
@@ -935,13 +938,14 @@ def create_contact(
 ):
     if (x_requested_by or x_supervisor_approval) and not is_admin_requester(db, x_supervisor_approval, x_requested_by):
         raise HTTPException(status_code=403, detail="Permission denied: Only Administrators can create contacts.")
-    if not db_get(db, Party, payload.party_id):
+    party = db_get(db, Party, payload.party_id)
+    if not party:
         raise HTTPException(status_code=400, detail="Party not found")
     name = payload.contact_name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Contact name cannot be empty.")
     row = Contact(
-        party_id=as_db_id(payload.party_id),
+        party_id=party.id,
         contact_name=name,
         email=payload.email.strip() if payload.email else None,
         phone=payload.phone.strip() if payload.phone else None,
@@ -974,9 +978,10 @@ def update_contact(
         raise HTTPException(status_code=404, detail="Contact not found")
     data = payload.model_dump(exclude_unset=True)
     if "party_id" in data and data["party_id"] is not None:
-        if not db_get(db, Party, data["party_id"]):
+        p_row = db_get(db, Party, data["party_id"])
+        if not p_row:
             raise HTTPException(status_code=400, detail="Party not found")
-        data["party_id"] = as_db_id(data["party_id"])
+        data["party_id"] = p_row.id
     if "contact_name" in data and data["contact_name"]:
         data["contact_name"] = data["contact_name"].strip()
     for k in ("email", "phone", "designation"):
@@ -1109,9 +1114,9 @@ def list_rates(
     if active_only:
         q = q.filter(RateMaster.is_active.is_(True))
     if party_id:
-        q = q.filter(RateMaster.party_id == as_db_id(party_id))
+        q = q.filter(RateMaster.party_id.in_(uuid_variants(party_id)))
     if commodity_id:
-        q = q.filter(RateMaster.commodity_id == as_db_id(commodity_id))
+        q = q.filter(RateMaster.commodity_id.in_(uuid_variants(commodity_id)))
     rates = q.order_by(RateMaster.created_at.desc()).all()
 
     pending_reqs = (
@@ -1134,8 +1139,8 @@ def lookup_rate(party_id: str, commodity_id: str, db: Session = Depends(get_db))
     return (
         db.query(RateMaster)
         .filter(
-            RateMaster.party_id == as_db_id(party_id),
-            RateMaster.commodity_id == as_db_id(commodity_id),
+            RateMaster.party_id.in_(uuid_variants(party_id)),
+            RateMaster.commodity_id.in_(uuid_variants(commodity_id)),
             RateMaster.is_active.is_(True),
         )
         .order_by(RateMaster.created_at.desc())
@@ -1145,13 +1150,15 @@ def lookup_rate(party_id: str, commodity_id: str, db: Session = Depends(get_db))
 
 @router.post("/rates", response_model=RateMasterResponse, status_code=201)
 def create_rate(payload: RateMasterCreate, db: Session = Depends(get_db)):
-    if not db_get(db, Party, payload.party_id):
+    party = db_get(db, Party, payload.party_id)
+    if not party:
         raise HTTPException(status_code=400, detail="Party not found")
-    if not db_get(db, Commodity, payload.commodity_id):
+    commodity = db_get(db, Commodity, payload.commodity_id)
+    if not commodity:
         raise HTTPException(status_code=400, detail="Commodity not found")
     data = payload.model_dump()
-    data["party_id"] = as_db_id(payload.party_id)
-    data["commodity_id"] = as_db_id(payload.commodity_id)
+    data["party_id"] = party.id
+    data["commodity_id"] = commodity.id
     row = RateMaster(rate_code=SequenceService.next_code(db, "RATE"), **data)
     db.add(row)
     db.commit()
@@ -1205,20 +1212,25 @@ def bulk_create_rates(
             errors.append(f"Row {idx}: Commodity '{item.commodity_name or item.commodity_id or 'Unknown'}' not found.")
             continue
 
-        cust_type = item.customer_type or matched_party.customer_type or CustomerType.REGISTERED
+        cust_type = item.customer_type or CustomerType.BOTH
+        if cust_type not in (CustomerType.BUYER, CustomerType.SELLER, CustomerType.BOTH):
+            cust_type = CustomerType.BOTH
+
+        b_type = item.brokerage_type or item.rate_type or RateType.FIXED
+        b_val = item.brokerage if item.brokerage is not None else item.rate
 
         try:
             row = RateMaster(
                 rate_code=SequenceService.next_code(db, "RATE"),
-                party_id=as_db_id(matched_party.id),
-                commodity_id=as_db_id(matched_comm.id),
+                party_id=matched_party.id,
+                commodity_id=matched_comm.id,
                 customer_type=cust_type,
                 rate_type=item.rate_type or RateType.FIXED,
                 rate=item.rate,
                 unit=item.unit or QtyUnit.MT,
                 currency=item.currency or Currency.INR,
-                brokerage_type=item.brokerage_type or RateType.FIXED,
-                brokerage=item.brokerage if item.brokerage is not None else Decimal(0),
+                brokerage_type=b_type,
+                brokerage=b_val,
             )
             db.add(row)
             db.commit()
@@ -1248,13 +1260,15 @@ def update_rate(
         raise HTTPException(status_code=404, detail="Rate not found")
     data = payload.model_dump(exclude_unset=True)
     if data.get("party_id") is not None:
-        if not db_get(db, Party, data["party_id"]):
+        p_row = db_get(db, Party, data["party_id"])
+        if not p_row:
             raise HTTPException(status_code=400, detail="Party not found")
-        data["party_id"] = as_db_id(data["party_id"])
+        data["party_id"] = p_row.id
     if data.get("commodity_id") is not None:
-        if not db_get(db, Commodity, data["commodity_id"]):
+        c_row = db_get(db, Commodity, data["commodity_id"])
+        if not c_row:
             raise HTTPException(status_code=400, detail="Commodity not found")
-        data["commodity_id"] = as_db_id(data["commodity_id"])
+        data["commodity_id"] = c_row.id
 
     FIELD_RATE_LABELS = {
         "rate": "Contract Base Rate",

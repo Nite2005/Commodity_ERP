@@ -322,7 +322,7 @@ class RateMasterCreate(BaseModel):
     customer_type: CustomerType
     commodity_id: UUID
     rate_type: RateType = RateType.FIXED
-    rate: Decimal = Field(gt=0)
+    rate: Decimal = Field(ge=0, default=0)
     unit: QtyUnit
     currency: Currency = Currency.INR
     brokerage_type: RateType = RateType.FIXED
@@ -342,7 +342,7 @@ class RateMasterUpdate(BaseModel):
     customer_type: CustomerType | None = None
     commodity_id: UUID | None = None
     rate_type: RateType | None = None
-    rate: Decimal | None = Field(default=None, gt=0)
+    rate: Decimal | None = Field(default=None, ge=0)
     unit: QtyUnit | None = None
     currency: Currency | None = None
     brokerage_type: RateType | None = None

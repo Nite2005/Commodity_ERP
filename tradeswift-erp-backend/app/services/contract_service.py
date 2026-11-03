@@ -75,7 +75,11 @@ class ContractService:
         cls._validate_parties_for_company(seller, buyer, str(company.id))
         commodity = cls._require_active_fk(db, Commodity, payload.commodity_id, "Commodity")
         tax = cls._require_active_fk(db, Tax, payload.tax_id, "Tax")
-        broker = cls._require_active_fk(db, Broker, payload.broker_id, "Broker")
+        broker = (
+            cls._require_active_fk(db, Broker, payload.broker_id, "Broker")
+            if payload.broker_id
+            else db.query(Broker).filter(Broker.is_active.is_(True)).first()
+        )
         payment_term = (
             cls._require_active_fk(db, PaymentTerm, payload.payment_term_id, "Payment term")
             if payload.payment_term_id
@@ -106,7 +110,7 @@ class ContractService:
             commodity_id=str(commodity.id),
             quality_allowance=quality,
             notes=payload.notes,
-            packing=payload.packing.strip(),
+            packing=(payload.packing or "NA").strip(),
             qty_low=payload.qty_low,
             qty_high=payload.qty_high,
             qty_unit=payload.qty_unit,
@@ -117,9 +121,9 @@ class ContractService:
             weightment_unit_id=str(weightment_unit.id) if weightment_unit else None,
             despatch_from=payload.despatch_from,
             despatch_to=payload.despatch_to,
-            broker_id=str(broker.id),
-            broker_rate=payload.broker_rate,
-            broker_rate_type=payload.broker_rate_type,
+            broker_id=str(broker.id) if broker else None,
+            broker_rate=payload.broker_rate if payload.broker_rate is not None else Decimal("0"),
+            broker_rate_type=payload.broker_rate_type or RateType.FIXED,
             status=cls._initial_status(payload.contract_type),
         )
         cls._apply_print_options(row, payload.print_options)

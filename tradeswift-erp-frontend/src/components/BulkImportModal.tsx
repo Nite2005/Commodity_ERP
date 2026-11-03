@@ -8,6 +8,7 @@ import {
   X,
   RefreshCw,
   FileText,
+  Download,
 } from 'lucide-react'
 import { Button } from './Button'
 
@@ -38,8 +39,8 @@ function normalizePartyRow(raw: Record<string, any>): Record<string, any> {
   }
 
   const name =
-    map['name'] ||
     map['partyname'] ||
+    map['name'] ||
     map['party'] ||
     map['firmname'] ||
     map['firm'] ||
@@ -50,26 +51,70 @@ function normalizePartyRow(raw: Record<string, any>): Record<string, any> {
   const short_name =
     map['shortname'] || map['short'] || map['alias'] || (name ? String(name).slice(0, 20).trim() : '')
 
-  const gst_tin = map['gsttin'] || map['gstin'] || map['gst'] || map['taxid'] || null
-  const customer_type = map['customertype'] || map['type'] || (gst_tin ? 'REGISTERED' : 'UNREGISTERED')
+  const gst_tin =
+    map['gstno'] ||
+    map['gstin'] ||
+    map['gsttin'] ||
+    map['gst'] ||
+    map['taxid'] ||
+    null
+
+  const customer_type =
+    map['customertype'] ||
+    map['type'] ||
+    (gst_tin ? 'REGISTERED' : 'UNREGISTERED')
+
+  const mobile =
+    map['contactno'] ||
+    map['contact'] ||
+    map['mobile'] ||
+    map['phone'] ||
+    map['cell']
+      ? String(
+          map['contactno'] ||
+            map['contact'] ||
+            map['mobile'] ||
+            map['phone'] ||
+            map['cell'],
+        ).trim()
+      : null
+
+  const address =
+    map['address'] || map['addressline'] || map['addr'] || 'N/A'
+
+  const designation =
+    map['designation'] || map['role'] ? String(map['designation'] || map['role']).trim() : null
+
+  const bank_name =
+    map['bankname'] || map['bank'] ? String(map['bankname'] || map['bank']).trim() : null
+
+  const account_no =
+    map['accountno'] || map['account'] || map['accno']
+      ? String(map['accountno'] || map['account'] || map['accno']).trim()
+      : null
+
+  const ifsc_code =
+    map['ifsc'] || map['ifsccode']
+      ? String(map['ifsc'] || map['ifsccode']).trim().toUpperCase()
+      : null
 
   return {
     name: String(name).trim(),
     short_name: String(short_name).trim(),
     customer_type: String(customer_type).trim().toUpperCase(),
     gst_tin: gst_tin ? String(gst_tin).trim().toUpperCase() : null,
-    address_line: String(map['addressline'] || map['address'] || map['addr'] || 'N/A').trim(),
-    city: String(map['city'] || 'N/A').trim(),
-    state: String(map['state'] || 'N/A').trim(),
-    pincode: String(map['pincode'] || map['pin'] || map['zip'] || '000000').trim().slice(0, 6),
-    mobile: map['mobile'] || map['phone'] || map['cell'] ? String(map['mobile'] || map['phone'] || map['cell']).trim() : null,
+    address_line: String(address).trim(),
+    city: String(map['city'] || 'Jaipur').trim(),
+    state: String(map['state'] || 'Rajasthan').trim(),
+    pincode: String(map['pincode'] || map['pin'] || map['zip'] || '302001').trim().slice(0, 6),
+    mobile: mobile,
     phone: map['landline'] || map['phone'] ? String(map['landline'] || map['phone']).trim() : null,
     email: map['email'] || map['mail'] ? String(map['email'] || map['mail']).trim() : null,
-    contact_name: map['contactname'] || map['contactperson'] || map['contact'] ? String(map['contactname'] || map['contactperson'] || map['contact']).trim() : null,
-    designation: map['designation'] ? String(map['designation']).trim() : null,
-    bank_name: map['bankname'] || map['bank'] ? String(map['bankname'] || map['bank']).trim() : null,
-    account_no: map['accountno'] || map['account'] || map['accno'] ? String(map['accountno'] || map['account'] || map['accno']).trim() : null,
-    ifsc_code: map['ifsccode'] || map['ifsc'] ? String(map['ifsccode'] || map['ifsc']).trim().toUpperCase() : null,
+    contact_name: map['contactname'] || map['contactperson'] ? String(map['contactname'] || map['contactperson']).trim() : null,
+    designation: designation,
+    bank_name: bank_name,
+    account_no: account_no,
+    ifsc_code: ifsc_code,
     credit_limit: map['creditlimit'] || map['limit'] ? Number(map['creditlimit'] || map['limit']) : 5000000,
   }
 }
@@ -81,12 +126,41 @@ function normalizeRateRow(raw: Record<string, any>): Record<string, any> {
   }
 
   const party = map['partyname'] || map['party'] || map['partycode'] || map['partyid'] || ''
-  const commodity = map['commodityname'] || map['commodity'] || map['item'] || map['commodityid'] || map['commshortname'] || ''
-  const rateVal = map['rate'] || map['price'] || map['amount'] || 0
-  const rateType = String(map['ratetype'] || 'FIXED').toUpperCase()
-  const unit = String(map['unit'] || map['qtyunit'] || 'MT').toUpperCase()
-  const brokerageType = String(map['brokeragetype'] || 'FIXED').toUpperCase()
-  const brokerage = Number(map['brokerage'] || map['brokrate'] || 0)
+  const commodity =
+    map['commodity'] ||
+    map['commodityname'] ||
+    map['item'] ||
+    map['commodityid'] ||
+    map['commshortname'] ||
+    ''
+
+  const rawCustomerType = String(
+    map['customertype'] || map['partytype'] || map['role'] || 'BOTH',
+  )
+    .toUpperCase()
+    .trim()
+  const customerType = rawCustomerType.includes('BUY')
+    ? 'BUYER'
+    : rawCustomerType.includes('SELL')
+    ? 'SELLER'
+    : 'BOTH'
+
+  const rateVal = Number(map['rate'] || map['price'] || map['amount'] || 0)
+  const rawRateType = String(map['ratetype'] || 'FIXED').toUpperCase().trim()
+  const rateType = rawRateType.includes('PERCENT') ? 'PERCENTAGE' : 'FIXED'
+
+  const rawUnit = String(map['unit'] || map['qtyunit'] || 'MT').toUpperCase().trim()
+  const unit = ['MT', 'KGS', 'QUINTAL', 'BAGS'].includes(rawUnit) ? rawUnit : 'MT'
+
+  const rawBrok =
+    map['brokerage'] !== undefined && map['brokerage'] !== ''
+      ? Number(map['brokerage'])
+      : rateVal
+  const brokerage = isNaN(rawBrok) ? rateVal : rawBrok
+  const rawBrokType = map['brokeragetype']
+    ? String(map['brokeragetype']).toUpperCase().trim()
+    : rateType
+  const brokerageType = rawBrokType.includes('PERCENT') ? 'PERCENTAGE' : 'FIXED'
 
   return {
     party_name: String(party).trim(),
@@ -94,12 +168,89 @@ function normalizeRateRow(raw: Record<string, any>): Record<string, any> {
     party_id: map['partyid'] ? String(map['partyid']).trim() : null,
     commodity_name: String(commodity).trim(),
     commodity_id: map['commodityid'] ? String(map['commodityid']).trim() : null,
-    rate_type: rateType.includes('PERCENT') ? 'PERCENTAGE' : 'FIXED',
-    rate: Number(rateVal),
-    unit: ['MT', 'KGS', 'QUINTAL', 'BAGS'].includes(unit) ? unit : 'MT',
+    customer_type: customerType,
+    rate_type: rateType,
+    rate: rateVal,
+    unit: unit,
     currency: 'INR',
-    brokerage_type: brokerageType.includes('PERCENT') ? 'PERCENTAGE' : 'FIXED',
-    brokerage: isNaN(brokerage) ? 0 : brokerage,
+    brokerage_type: brokerageType,
+    brokerage: brokerage,
+  }
+}
+
+export function downloadSampleTemplate(entityType: 'Party' | 'Rate') {
+  const wb = XLSX.utils.book_new()
+  if (entityType === 'Party') {
+    const headers = [
+      'PARTY NAME',
+      'SHORT NAME',
+      'GST NO.',
+      'ADDRESS',
+      'CONTACT NO.',
+      'DESIGNATION',
+      'BANK NAME',
+      'ACCOUNT NO.',
+      'IFSC',
+    ]
+    const sampleRows = [
+      headers,
+      [
+        'Shree Shyam Trading Co',
+        'Shree Shyam',
+        '08AABCU9603R1ZM',
+        'Sitapura Industrial Area, Jaipur',
+        '9876543210',
+        'Proprietor',
+        'HDFC Bank',
+        '50200012345678',
+        'HDFC0001234',
+      ],
+    ]
+    const ws = XLSX.utils.aoa_to_sheet(sampleRows)
+    ws['!cols'] = [
+      { wch: 28 },
+      { wch: 18 },
+      { wch: 20 },
+      { wch: 35 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 18 },
+      { wch: 22 },
+      { wch: 16 },
+    ]
+    XLSX.utils.book_append_sheet(wb, ws, 'Parties')
+    XLSX.writeFile(wb, 'Party_Import_Template.xlsx')
+  } else {
+    const headers = [
+      'PARTY NAME',
+      'CUSTOMER TYPE',
+      'COMMODITY',
+      'RATE TYPE',
+      'RATE',
+      'UNIT',
+    ]
+    const sampleRows = [
+      headers,
+      [
+        'Ravi Shankar Oil Mill',
+        'Buyer',
+        'Mustard Seed',
+        'Fixed',
+        10,
+        'MT',
+      ],
+    ]
+    const ws = XLSX.utils.aoa_to_sheet(sampleRows)
+    ws['!cols'] = [
+      { wch: 28 },
+      { wch: 16 },
+      { wch: 20 },
+      { wch: 14 },
+      { wch: 12 },
+      { wch: 10 },
+    ]
+    XLSX.utils.book_append_sheet(wb, ws, 'Billing Rates')
+    XLSX.writeFile(wb, 'Billing_Rate_Import_Template.xlsx')
   }
 }
 
@@ -182,8 +333,8 @@ export function BulkImportModal({
       if (validRows.length === 0) {
         throw new Error(
           entityType === 'Party'
-            ? 'No valid party rows found. Each party must have a Name column.'
-            : 'No valid rate rows found. Each rate must have Party, Commodity, and Rate columns.',
+            ? 'No valid party rows found. Each party must have a "PARTY NAME" column.'
+            : 'No valid rate rows found. Each rate must have PARTY NAME, COMMODITY, and RATE columns.',
         )
       }
 
@@ -230,7 +381,7 @@ export function BulkImportModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={handleClose} />
-      <div className="relative max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-2xl">
+      <div className="relative max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-xl bg-white shadow-2xl">
         {/* Header */}
         <div className="sticky top-0 flex items-center justify-between border-b border-slate-100 bg-white px-6 py-4">
           <div>
@@ -296,6 +447,29 @@ export function BulkImportModal({
             </div>
           ) : (
             <>
+              {/* Template Download Banner */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-lg border border-brand-200 bg-brand-50/60 p-3.5">
+                <div>
+                  <p className="text-xs font-semibold text-brand-900">
+                    Need the format? Download the official Excel template:
+                  </p>
+                  <p className="text-[11px] text-brand-700 mt-0.5">
+                    {entityType === 'Party'
+                      ? 'Columns: PARTY NAME, SHORT NAME, GST NO., ADDRESS, CONTACT NO., DESIGNATION, BANK NAME, ACCOUNT NO., IFSC'
+                      : 'Columns: PARTY NAME, CUSTOMER TYPE, COMMODITY, RATE TYPE, RATE, UNIT'}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => downloadSampleTemplate(entityType)}
+                  className="shrink-0 bg-white hover:bg-brand-50 text-brand-700 border-brand-300 font-medium shadow-xs"
+                >
+                  <Download size={14} className="mr-1 text-brand-600" /> Download Template (.xlsx)
+                </Button>
+              </div>
+
               {/* Drag & Drop File Upload Area */}
               <div
                 onDragOver={(e) => {
@@ -334,7 +508,7 @@ export function BulkImportModal({
                   ) : (
                     <div>
                       <p className="font-medium text-slate-700">
-                        Click or drag & drop your data file here
+                        Click or drag & drop your Excel/CSV data file here
                       </p>
                       <p className="text-xs text-slate-500 mt-1">
                         Compatible with .xlsx, .xls, .csv, .tsv, .txt, .json
@@ -375,24 +549,29 @@ export function BulkImportModal({
                     </span>
                     <span className="text-emerald-700 font-semibold">✓ Ready to import</span>
                   </div>
-                  <div className="max-h-56 overflow-auto rounded-lg border border-slate-200 bg-white">
+                  <div className="max-h-60 overflow-auto rounded-lg border border-slate-200 bg-white">
                     <table className="w-full text-left text-xs">
                       <thead className="sticky top-0 bg-slate-100 text-slate-700 font-semibold">
                         {entityType === 'Party' ? (
                           <tr>
-                            <th className="px-3 py-2">Name</th>
-                            <th className="px-3 py-2">Short Name</th>
-                            <th className="px-3 py-2">Customer Type</th>
-                            <th className="px-3 py-2">GSTIN</th>
-                            <th className="px-3 py-2">City</th>
+                            <th className="px-3 py-2 whitespace-nowrap">Party Name</th>
+                            <th className="px-3 py-2 whitespace-nowrap">Short Name</th>
+                            <th className="px-3 py-2 whitespace-nowrap">GST No.</th>
+                            <th className="px-3 py-2 whitespace-nowrap">Address</th>
+                            <th className="px-3 py-2 whitespace-nowrap">Contact No.</th>
+                            <th className="px-3 py-2 whitespace-nowrap">Designation</th>
+                            <th className="px-3 py-2 whitespace-nowrap">Bank Name</th>
+                            <th className="px-3 py-2 whitespace-nowrap">Account No.</th>
+                            <th className="px-3 py-2 whitespace-nowrap">IFSC</th>
                           </tr>
                         ) : (
                           <tr>
-                            <th className="px-3 py-2">Party</th>
-                            <th className="px-3 py-2">Commodity</th>
-                            <th className="px-3 py-2">Rate</th>
-                            <th className="px-3 py-2">Unit</th>
-                            <th className="px-3 py-2">Brokerage</th>
+                            <th className="px-3 py-2 whitespace-nowrap">Party Name</th>
+                            <th className="px-3 py-2 whitespace-nowrap">Customer Type</th>
+                            <th className="px-3 py-2 whitespace-nowrap">Commodity</th>
+                            <th className="px-3 py-2 whitespace-nowrap">Rate Type</th>
+                            <th className="px-3 py-2 whitespace-nowrap">Rate</th>
+                            <th className="px-3 py-2 whitespace-nowrap">Unit</th>
                           </tr>
                         )}
                       </thead>
@@ -401,19 +580,24 @@ export function BulkImportModal({
                           <tr key={idx} className="hover:bg-slate-50">
                             {entityType === 'Party' ? (
                               <>
-                                <td className="px-3 py-2 font-medium text-slate-800">{row.name}</td>
-                                <td className="px-3 py-2 text-slate-600">{row.short_name}</td>
-                                <td className="px-3 py-2 text-slate-600">{row.customer_type}</td>
-                                <td className="px-3 py-2 text-slate-600">{row.gst_tin || '-'}</td>
-                                <td className="px-3 py-2 text-slate-600">{row.city}</td>
+                                <td className="px-3 py-2 font-medium text-slate-800 whitespace-nowrap">{row.name}</td>
+                                <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{row.short_name}</td>
+                                <td className="px-3 py-2 text-slate-600 font-mono text-[11px] whitespace-nowrap">{row.gst_tin || '—'}</td>
+                                <td className="px-3 py-2 text-slate-600 truncate max-w-[160px]" title={row.address_line}>{row.address_line}</td>
+                                <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{row.mobile || '—'}</td>
+                                <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{row.designation || '—'}</td>
+                                <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{row.bank_name || '—'}</td>
+                                <td className="px-3 py-2 text-slate-600 font-mono text-[11px] whitespace-nowrap">{row.account_no || '—'}</td>
+                                <td className="px-3 py-2 text-slate-600 font-mono text-[11px] whitespace-nowrap">{row.ifsc_code || '—'}</td>
                               </>
                             ) : (
                               <>
-                                <td className="px-3 py-2 font-medium text-slate-800">{row.party_name}</td>
-                                <td className="px-3 py-2 text-slate-600">{row.commodity_name}</td>
-                                <td className="px-3 py-2 text-slate-600">₹{row.rate}</td>
-                                <td className="px-3 py-2 text-slate-600">{row.unit}</td>
-                                <td className="px-3 py-2 text-slate-600">₹{row.brokerage}</td>
+                                <td className="px-3 py-2 font-medium text-slate-800 whitespace-nowrap">{row.party_name}</td>
+                                <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{row.customer_type}</td>
+                                <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{row.commodity_name}</td>
+                                <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{row.rate_type}</td>
+                                <td className="px-3 py-2 text-slate-600 font-medium whitespace-nowrap">₹{row.rate}</td>
+                                <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{row.unit}</td>
                               </>
                             )}
                           </tr>

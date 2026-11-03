@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Plus, Pencil, Trash2, RefreshCw } from 'lucide-react'
 import { mastersApi, ApiClientError } from '../../api/client'
 import type { Contact, Party } from '../../types'
@@ -27,7 +27,14 @@ export function ContactsPage() {
   })
   const [saving, setSaving] = useState(false)
 
-  const partyMap = Object.fromEntries(parties.map((p) => [p.id, p.name]))
+  const partyMap = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const p of parties) {
+      map[p.id] = p.name
+      map[p.id.replace(/-/g, '')] = p.name
+    }
+    return map
+  }, [parties])
 
   const load = useCallback(async () => {
     setLoading(true)

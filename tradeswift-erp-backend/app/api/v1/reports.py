@@ -1,6 +1,6 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -25,8 +25,6 @@ CONTRACT_CSV_HEADERS = [
     "Final Qty",
     "Unit",
     "Rate",
-    "Broker",
-    "Broker Rate",
     "Despatch From",
     "Despatch To",
 ]
@@ -44,8 +42,6 @@ CONTRACT_CSV_KEYS = [
     "final_qty",
     "qty_unit",
     "rate",
-    "broker_name",
-    "broker_rate",
     "despatch_from",
     "despatch_to",
 ]
@@ -97,7 +93,8 @@ def contract_register(
     date_from: date | None = None,
     date_to: date | None = None,
     company_id: str | None = None,
-    party_id: str | None = None,
+    party_id: str | None = Query(default=None, description="Filter by seller or buyer (single or comma-separated)"),
+    party_ids: list[str] | None = Query(default=None, description="Filter by multiple seller or buyer parties"),
     status: ContractStatus | None = None,
     active_only: bool = True,
     db: Session = Depends(get_db),
@@ -108,6 +105,7 @@ def contract_register(
         date_to=date_to,
         company_id=company_id,
         party_id=party_id,
+        party_ids=party_ids,
         status=status,
         active_only=active_only,
     )
@@ -118,7 +116,8 @@ def export_contract_register(
     date_from: date | None = None,
     date_to: date | None = None,
     company_id: str | None = None,
-    party_id: str | None = None,
+    party_id: str | None = Query(default=None, description="Filter by seller or buyer (single or comma-separated)"),
+    party_ids: list[str] | None = Query(default=None, description="Filter by multiple seller or buyer parties"),
     status: ContractStatus | None = None,
     active_only: bool = True,
     db: Session = Depends(get_db),
@@ -129,6 +128,7 @@ def export_contract_register(
         date_to=date_to,
         company_id=company_id,
         party_id=party_id,
+        party_ids=party_ids,
         status=status,
         active_only=active_only,
     )

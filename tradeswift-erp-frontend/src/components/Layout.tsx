@@ -119,7 +119,7 @@ export function Layout() {
         </div>
       </aside>
 
-      <main className="ml-64 flex min-h-screen flex-1 flex-col">
+      <main className="ml-64 flex min-h-screen flex-1 flex-col min-w-0 max-w-full overflow-x-hidden">
         <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 px-8 py-3.5 backdrop-blur print:hidden">
           <div className="flex items-center justify-between gap-4">
             <div>
@@ -178,7 +178,7 @@ export function Layout() {
             </div>
           </div>
         </header>
-        <div className="flex-1 p-8">
+        <div className="flex-1 p-8 min-w-0 max-w-full overflow-x-hidden">
           <Outlet />
         </div>
       </main>

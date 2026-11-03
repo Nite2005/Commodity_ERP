@@ -167,9 +167,9 @@ export function ContractFormPage() {
       weightment_unit_id: null,
       despatch_from: form.despatch_from,
       despatch_to: form.despatch_to,
-      broker_id: form.broker_id,
+      broker_id: form.broker_id || brokers[0]?.id || null,
       broker_rate: Number(form.broker_rate || 0),
-      broker_rate_type: form.broker_rate_type,
+      broker_rate_type: form.broker_rate_type || 'FIXED',
     }
   }
 
@@ -372,53 +372,7 @@ export function ContractFormPage() {
               </div>
             </section>
 
-            <section>
-              <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-400">
-                Broker & Brokerage
-              </h3>
-              <div className="grid gap-4 sm:grid-cols-3">
-                <FormField label="Broker" required>
-                  <select className={inputClass} value={form.broker_id} onChange={(e) => set('broker_id', e.target.value)} required>
-                    <option value="">Select broker…</option>
-                    {brokers.map((b) => (
-                      <option key={b.id} value={b.id}>{b.broker_name}</option>
-                    ))}
-                  </select>
-                </FormField>
-                <FormField label="Brokerage Type" required>
-                  <select
-                    className={inputClass}
-                    value={form.broker_rate_type}
-                    onChange={(e) => set('broker_rate_type', e.target.value)}
-                  >
-                    <option value="FIXED">Fixed (Per {form.qty_unit || 'MT'})</option>
-                    <option value="PERCENTAGE">Percentage (% of Transaction Value)</option>
-                  </select>
-                </FormField>
-                <FormField
-                  label={
-                    form.broker_rate_type === 'PERCENTAGE'
-                      ? 'Brokerage Rate (%)'
-                      : `Brokerage Rate (₹ / ${form.qty_unit || 'MT'})`
-                  }
-                  hint={
-                    form.broker_rate_type === 'PERCENTAGE'
-                      ? 'Calculated on total transaction value (Quantity × Rate)'
-                      : `Calculated per ${form.qty_unit || 'MT'} quantity`
-                  }
-                >
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max={form.broker_rate_type === 'PERCENTAGE' ? 100 : undefined}
-                    className={inputClass}
-                    value={form.broker_rate}
-                    onChange={(e) => set('broker_rate', e.target.value)}
-                  />
-                </FormField>
-              </div>
-            </section>
+
 
             <section>
               <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-400">

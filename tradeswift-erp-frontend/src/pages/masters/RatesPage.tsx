@@ -205,8 +205,28 @@ export function RatesPage() {
               },
               {
                 key: 'party_id',
-                label: 'Party',
+                label: 'Party Name',
                 render: (r) => partyMap[r.party_id as string] ?? '—',
+              },
+              {
+                key: 'customer_type',
+                label: 'Customer Type',
+                render: (r) => {
+                  const ct = ((r as unknown as RateMaster).customer_type as string) || 'BOTH'
+                  return (
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${
+                        ct === 'SELLER'
+                          ? 'bg-amber-100 text-amber-800'
+                          : ct === 'BUYER'
+                          ? 'bg-blue-100 text-blue-800'
+                          : 'bg-slate-100 text-slate-700'
+                      }`}
+                    >
+                      {ct}
+                    </span>
+                  )
+                },
               },
               {
                 key: 'commodity_id',
@@ -215,7 +235,7 @@ export function RatesPage() {
               },
               {
                 key: 'rate_type',
-                label: 'Type',
+                label: 'Rate Type',
                 render: (r) => ((r.rate_type as string) || 'FIXED') === 'PERCENTAGE' ? '%' : 'Fixed',
               },
               {

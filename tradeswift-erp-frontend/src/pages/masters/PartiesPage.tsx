@@ -291,10 +291,54 @@ export function PartiesPage() {
                   </div>
                 ),
               },
-              { key: 'short_name', label: 'Short' },
+              { key: 'short_name', label: 'Short Name' },
+              { key: 'gst_tin', label: 'GST No.', render: (r) => (r.gst_tin as string) || '—' },
+              {
+                key: 'address',
+                label: 'Address',
+                render: (r) => {
+                  const p = r as unknown as Party
+                  const full =
+                    [p.address_line, p.city, p.state].filter(Boolean).filter((s) => s !== 'N/A').join(', ') ||
+                    p.address_line ||
+                    p.city ||
+                    '—'
+                  return (
+                    <span className="truncate max-w-[200px] inline-block" title={full}>
+                      {full}
+                    </span>
+                  )
+                },
+              },
+              {
+                key: 'contact_no',
+                label: 'Contact No.',
+                render: (r) => {
+                  const p = r as unknown as Party
+                  return p.mobile || p.phone || '—'
+                },
+              },
+              {
+                key: 'designation',
+                label: 'Designation',
+                render: (r) => ((r as unknown as Party).designation as string) || '—',
+              },
+              {
+                key: 'bank_name',
+                label: 'Bank Name',
+                render: (r) => ((r as unknown as Party).bank_name as string) || '—',
+              },
+              {
+                key: 'account_no',
+                label: 'Account No.',
+                render: (r) => ((r as unknown as Party).account_no as string) || '—',
+              },
+              {
+                key: 'ifsc_code',
+                label: 'IFSC',
+                render: (r) => ((r as unknown as Party).ifsc_code as string) || '—',
+              },
               { key: 'customer_type', label: 'Type' },
-              { key: 'city', label: 'City' },
-              { key: 'gst_tin', label: 'GST', render: (r) => (r.gst_tin as string) || '—' },
               {
                 key: 'status',
                 label: 'Status',

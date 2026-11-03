@@ -147,7 +147,6 @@ export function ContractDetailPage() {
                 <Row label="Buyer" value={contract.buyer_name} />
                 <Row label="Commodity" value={contract.commodity_name} />
                 <Row label="Short Name" value={contract.commodity_short_name} />
-                <Row label="Packing" value={contract.packing} />
               </div>
               <div>
                 <Row
@@ -176,14 +175,6 @@ export function ContractDetailPage() {
                 <Row
                   label="Despatch"
                   value={`${formatDateDmy(contract.despatch_from)} → ${formatDateDmy(contract.despatch_to)}`}
-                />
-                <Row
-                  label="Broker"
-                  value={
-                    contract.broker_rate_type === 'PERCENTAGE'
-                      ? `${contract.broker_name} @ ${contract.broker_rate}% of value`
-                      : `${contract.broker_name} @ ₹${contract.broker_rate} / ${contract.qty_unit || 'MT'}`
-                  }
                 />
               </div>
             </CardBody>

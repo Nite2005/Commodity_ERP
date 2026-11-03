@@ -5,8 +5,8 @@ from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
-from app.models import Bill, BillLineItem, Contract, Despatch, Party, Tax
-from app.models.enums import BillingStatus, ContractStatus, RateType
+from app.models import Bill, BillLineItem, Contract, Despatch, Party, RateMaster, Tax
+from app.models.enums import BillingStatus, ContractStatus, CustomerType, RateType
 from app.schemas.bill import BillCreate
 from app.services.contract_service import ContractService
 from app.services.sequence_service import SequenceService
@@ -15,6 +15,49 @@ from app.utils.ids import as_db_id, db_get, uuid_variants
 
 
 class BillingService:
+    @classmethod
+    def get_billing_rate(
+        cls, db: Session, party_id: str, commodity_id: str, is_seller: bool
+    ) -> tuple[Decimal, RateType] | None:
+        party_vars = uuid_variants(party_id)
+        comm_vars = uuid_variants(commodity_id)
+        role_types = [
+            CustomerType.BOTH,
+            CustomerType.SELLER if is_seller else CustomerType.BUYER,
+        ]
+
+        rm = (
+            db.query(RateMaster)
+            .filter(
+                RateMaster.party_id.in_(party_vars),
+                RateMaster.commodity_id.in_(comm_vars),
+                RateMaster.customer_type.in_(role_types),
+                RateMaster.is_active.is_(True),
+            )
+            .order_by(RateMaster.created_at.desc())
+            .first()
+        )
+        if not rm:
+            rm = (
+                db.query(RateMaster)
+                .filter(
+                    RateMaster.party_id.in_(party_vars),
+                    RateMaster.commodity_id.in_(comm_vars),
+                    RateMaster.is_active.is_(True),
+                )
+                .order_by(RateMaster.created_at.desc())
+                .first()
+            )
+        if not rm:
+            return None
+
+        b_val = Decimal(str(rm.brokerage or 0))
+        if b_val > Decimal("0"):
+            return b_val, rm.brokerage_type
+        r_val = Decimal(str(rm.rate or 0))
+        if r_val > Decimal("0") and rm.rate_type == RateType.PERCENTAGE:
+            return r_val, rm.rate_type
+        return b_val, rm.brokerage_type or rm.rate_type or RateType.FIXED
     @classmethod
     def list_billable_contracts(
         cls,
@@ -73,6 +116,20 @@ class BillingService:
             is_seller = bool(party_vars_set.intersection(contract_seller_vars))
             party_role = "Seller" if is_seller else "Buyer"
 
+            rate_info = cls.get_billing_rate(
+                db, party_id, str(contract.commodity_id), is_seller
+            )
+            if rate_info is not None:
+                effective_broker_rate, effective_broker_rate_type = rate_info
+            elif contract.broker_rate is not None:
+                effective_broker_rate = Decimal(str(contract.broker_rate))
+                effective_broker_rate_type = (
+                    getattr(contract, "broker_rate_type", RateType.FIXED) or RateType.FIXED
+                )
+            else:
+                effective_broker_rate = Decimal("0")
+                effective_broker_rate_type = RateType.FIXED
+
             rows.append(
                 {
                     "id": contract.id,
@@ -94,6 +151,12 @@ class BillingService:
                     "remaining_billable": remaining,
                     "tax_id": contract.tax_id,
                     "party_role": party_role,
+                    "broker_rate": effective_broker_rate,
+                    "broker_rate_type": (
+                        effective_broker_rate_type.value
+                        if hasattr(effective_broker_rate_type, "value")
+                        else str(effective_broker_rate_type)
+                    ),
                 }
             )
         return rows
@@ -196,13 +259,13 @@ class BillingService:
             if line.despatch_id:
                 despatch = (
                     db.query(Despatch)
-                    .filter(Despatch.id == as_db_id(line.despatch_id))
+                    .filter(Despatch.id.in_(uuid_variants(line.despatch_id)))
                     .with_for_update()
                     .first()
                 )
                 if not despatch or not despatch.is_active:
                     raise HTTPException(status_code=400, detail="Linked despatch not found.")
-                if despatch.contract_id != contract.id:
+                if despatch.contract_id not in uuid_variants(contract.id):
                     raise HTTPException(
                         status_code=400,
                         detail=f"Despatch {despatch.despatch_no} does not belong to contract "
@@ -218,8 +281,20 @@ class BillingService:
             rate = Decimal(str(contract.rate))
             line_base = qty * rate
             base_amount += line_base
-            broker_rate = Decimal(str(contract.broker_rate or 0))
-            broker_rate_type = getattr(contract, "broker_rate_type", RateType.FIXED) or RateType.FIXED
+            # Fetch rate from Billing Rate master
+            contract_seller_vars = set(uuid_variants(contract.seller_id))
+            line_is_seller = bool(party_vars.intersection(contract_seller_vars))
+            rate_info = cls.get_billing_rate(
+                db, str(party.id), str(contract.commodity_id), line_is_seller
+            )
+            if rate_info is not None:
+                broker_rate, broker_rate_type = rate_info
+            elif contract.broker_rate is not None:
+                broker_rate = Decimal(str(contract.broker_rate))
+                broker_rate_type = getattr(contract, "broker_rate_type", RateType.FIXED) or RateType.FIXED
+            else:
+                broker_rate = Decimal("0")
+                broker_rate_type = RateType.FIXED
             if broker_rate_type == RateType.PERCENTAGE:
                 # Percentage brokerage calculated on basis of transaction value: (line_base * broker_rate) / 100
                 line_brokerage = (line_base * broker_rate) / Decimal("100")
@@ -236,6 +311,9 @@ class BillingService:
                     "quantity": qty,
                     "rate": rate,
                     "line_base_amount": line_base,
+                    "broker_rate": broker_rate,
+                    "broker_rate_type": broker_rate_type,
+                    "line_brokerage_amount": line_brokerage.quantize(Decimal("0.01")),
                 }
             )
 
@@ -249,7 +327,13 @@ class BillingService:
             party_state,
         )
         tax_amounts = TaxEngine.calculate(brokerage_amount, tax, supply_type)
-        gross_amount = TaxEngine.gross(brokerage_amount, tax_amounts)
+        raw_gross = (
+            brokerage_amount
+            + tax_amounts["igst_amount"]
+            + tax_amounts["cgst_amount"]
+            + tax_amounts["sgst_amount"]
+        )
+        gross_amount = raw_gross.quantize(Decimal("1"), rounding="ROUND_HALF_UP").quantize(Decimal("0.01"))
 
         bill = Bill(
             bill_no=SequenceService.next_code(db, "BILL"),
@@ -278,6 +362,9 @@ class BillingService:
                     quantity=item["quantity"],
                     rate=item["rate"],
                     line_base_amount=item["line_base_amount"],
+                    broker_rate=item["broker_rate"],
+                    broker_rate_type=item["broker_rate_type"],
+                    line_brokerage_amount=item["line_brokerage_amount"],
                 )
             )
             despatch = item["despatch"]
@@ -318,6 +405,7 @@ class BillingService:
 
     @staticmethod
     def to_detail(bill: Bill) -> dict:
+        db = Session.object_session(bill)
         lines = []
         first_contract = None
         for li in bill.line_items:
@@ -326,12 +414,45 @@ class BillingService:
             if contract and first_contract is None:
                 first_contract = contract
 
-            broker_rate = Decimal(str(contract.broker_rate or 0)) if contract else Decimal("0")
-            broker_rate_type = getattr(contract, "broker_rate_type", RateType.FIXED) if contract else RateType.FIXED
-            if broker_rate_type == RateType.PERCENTAGE:
-                line_brokerage = (Decimal(str(li.line_base_amount or 0)) * broker_rate) / Decimal("100")
+            # If snapshot exists on the line item, use it directly (immutable historical bill)
+            if getattr(li, "broker_rate", None) is not None and getattr(li, "line_brokerage_amount", None) is not None:
+                broker_rate = Decimal(str(li.broker_rate))
+                raw_type = getattr(li, "broker_rate_type", RateType.FIXED) or RateType.FIXED
+                broker_rate_type = raw_type if isinstance(raw_type, RateType) else RateType(str(raw_type))
+                line_brokerage = Decimal(str(li.line_brokerage_amount))
+            elif contract and db:
+                contract_seller_vars = set(uuid_variants(contract.seller_id))
+                line_is_seller = bool(set(uuid_variants(bill.party_id)).intersection(contract_seller_vars))
+                rate_info = BillingService.get_billing_rate(
+                    db, str(bill.party_id), str(contract.commodity_id), line_is_seller
+                )
+                if rate_info is not None:
+                    broker_rate, broker_rate_type = rate_info
+                elif contract.broker_rate is not None:
+                    broker_rate = Decimal(str(contract.broker_rate))
+                    broker_rate_type = (
+                        getattr(contract, "broker_rate_type", RateType.FIXED) or RateType.FIXED
+                    )
+                else:
+                    broker_rate = Decimal("0")
+                    broker_rate_type = RateType.FIXED
+                if broker_rate_type == RateType.PERCENTAGE:
+                    line_brokerage = (Decimal(str(li.line_base_amount or 0)) * broker_rate) / Decimal("100")
+                else:
+                    line_brokerage = Decimal(str(li.quantity or 0)) * broker_rate
+            elif contract and contract.broker_rate:
+                broker_rate = Decimal(str(contract.broker_rate))
+                broker_rate_type = (
+                    getattr(contract, "broker_rate_type", RateType.FIXED) or RateType.FIXED
+                )
+                if broker_rate_type == RateType.PERCENTAGE:
+                    line_brokerage = (Decimal(str(li.line_base_amount or 0)) * broker_rate) / Decimal("100")
+                else:
+                    line_brokerage = Decimal(str(li.quantity or 0)) * broker_rate
             else:
-                line_brokerage = Decimal(str(li.quantity or 0)) * broker_rate
+                broker_rate = Decimal("0")
+                broker_rate_type = RateType.FIXED
+                line_brokerage = Decimal("0")
 
             lines.append(
                 {
@@ -365,8 +486,21 @@ class BillingService:
         party = bill.party
         tax = bill.tax
         company = first_contract.company if first_contract and first_contract.company else None
+
+        total_brokerage = sum((line["line_brokerage_amount"] for line in lines), Decimal("0"))
+        exact_gross = (
+            total_brokerage
+            + Decimal(str(bill.igst_amount or 0))
+            + Decimal(str(bill.cgst_amount or 0))
+            + Decimal(str(bill.sgst_amount or 0))
+        )
+        rounded_gross = exact_gross.quantize(Decimal("1"), rounding="ROUND_HALF_UP").quantize(Decimal("0.01"))
+        round_off_amount = (rounded_gross - exact_gross).quantize(Decimal("0.01"))
+
         return {
             **{c.name: getattr(bill, c.name) for c in bill.__table__.columns},
+            "gross_amount": rounded_gross,
+            "round_off_amount": round_off_amount,
             "party_name": party.name if party else None,
             "party_code": party.party_code if party else None,
             "party_address": party.address_line if party else None,

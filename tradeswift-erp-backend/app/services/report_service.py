@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.models import Bill, Contract, Party
 from app.models.enums import ContractStatus
-from app.utils.ids import as_db_id
+from app.utils.ids import as_db_id, uuid_variants
 
 
 class ReportService:
@@ -20,6 +20,7 @@ class ReportService:
         date_to: date | None = None,
         company_id: str | None = None,
         party_id: str | None = None,
+        party_ids: list[str] | None = None,
         status: ContractStatus | None = None,
         active_only: bool = True,
     ) -> list[dict]:
@@ -35,10 +36,27 @@ class ReportService:
         if status:
             q = q.filter(Contract.status == status)
         if company_id:
-            q = q.filter(Contract.company_id == as_db_id(company_id))
+            q = q.filter(Contract.company_id.in_(uuid_variants(company_id)))
+
+        all_party_ids: list[str] = []
         if party_id:
-            party_key = as_db_id(party_id)
-            q = q.filter((Contract.seller_id == party_key) | (Contract.buyer_id == party_key))
+            for p in party_id.split(","):
+                p_clean = p.strip()
+                if p_clean and p_clean not in all_party_ids:
+                    all_party_ids.append(p_clean)
+        if party_ids:
+            for item in party_ids:
+                for p in item.split(","):
+                    p_clean = p.strip()
+                    if p_clean and p_clean not in all_party_ids:
+                        all_party_ids.append(p_clean)
+
+        if all_party_ids:
+            party_variants: list[str] = []
+            for p in all_party_ids:
+                party_variants.extend(uuid_variants(p))
+            q = q.filter((Contract.seller_id.in_(party_variants)) | (Contract.buyer_id.in_(party_variants)))
+
         if date_from:
             q = q.filter(Contract.contract_date >= date_from)
         if date_to:
@@ -86,10 +104,10 @@ class ReportService:
         if active_only:
             q = q.filter(Bill.is_active.is_(True))
         if party_id:
-            q = q.filter(Bill.party_id == as_db_id(party_id))
+            q = q.filter(Bill.party_id.in_(uuid_variants(party_id)))
         if company_id:
             q = q.join(Party, Bill.party_id == Party.id).filter(
-                Party.company_id == as_db_id(company_id)
+                Party.company_id.in_(uuid_variants(company_id))
             )
         if date_from:
             q = q.filter(Bill.bill_date >= date_from)

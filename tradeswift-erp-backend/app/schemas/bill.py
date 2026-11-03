@@ -48,6 +48,8 @@ class BillableContractResponse(BaseModel):
     remaining_billable: Decimal
     tax_id: UUID
     party_role: str | None = None
+    broker_rate: Decimal | None = None
+    broker_rate_type: str | None = None
 
 
 class BillLineItemResponse(ORMModel):
@@ -120,6 +122,7 @@ class BillDetailResponse(BillResponse):
     company_bank_name: str | None = None
     company_account_no: str | None = None
     company_ifsc_code: str | None = None
+    round_off_amount: Decimal | None = None
     line_items: list[BillLineItemResponse] = []
 
 

@@ -286,6 +286,9 @@ class BillLineItem(Base, AuditMixin):
     quantity: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     rate: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     line_base_amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
+    broker_rate: Mapped[float] = mapped_column(Numeric(12, 2), default=0.0)
+    broker_rate_type: Mapped[RateType] = mapped_column(Enum(RateType), default=RateType.FIXED, nullable=False)
+    line_brokerage_amount: Mapped[float] = mapped_column(Numeric(14, 2), default=0.0)
 
     bill: Mapped[Bill] = relationship(back_populates="line_items")
     despatch: Mapped[Despatch] = relationship()

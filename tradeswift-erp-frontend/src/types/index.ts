@@ -255,6 +255,8 @@ export interface BillableContract {
   remaining_billable: number
   tax_id: string
   party_role?: string | null
+  broker_rate?: number | null
+  broker_rate_type?: string | null
 }
 
 export interface Bill {
@@ -327,6 +329,7 @@ export interface BillDetail extends Bill {
   company_bank_name?: string | null
   company_account_no?: string | null
   company_ifsc_code?: string | null
+  round_off_amount?: number | null
   line_items: BillLineItem[]
 }
 
