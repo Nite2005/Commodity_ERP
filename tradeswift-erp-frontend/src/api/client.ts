@@ -73,7 +73,7 @@ export const api = {
     request<T>(path, { method: 'PUT', body: JSON.stringify(data) }),
   patch: <T>(path: string, data: unknown) =>
     request<T>(path, { method: 'PATCH', body: JSON.stringify(data) }),
-  delete: (path: string) => request<void>(path, { method: 'DELETE' }),
+  delete: <T = any>(path: string) => request<T>(path, { method: 'DELETE' }),
 }
 
 export const mastersApi = {
@@ -120,7 +120,10 @@ export const mastersApi = {
       ),
     update: (id: string, data: object) =>
       api.put<import('../types').Party>(`/masters/parties/${id}`, data),
-    remove: (id: string) => api.delete(`/masters/parties/${id}`),
+    toggleStatus: (id: string) =>
+      api.patch<{ id: string; is_active: boolean }>(`/masters/parties/${id}/toggle-status`, {}),
+    remove: (id: string, permanent = false) =>
+      api.delete<{ detail?: string }>(`/masters/parties/${id}?permanent=${permanent}`),
     uploadCheque: async (id: string, file: File) => {
       const formData = new FormData()
       formData.append('file', file)
@@ -207,7 +210,10 @@ export const mastersApi = {
       ),
     update: (id: string, data: object) =>
       api.put<import('../types').RateMaster>(`/masters/rates/${id}`, data),
-    remove: (id: string) => api.delete(`/masters/rates/${id}`),
+    toggleStatus: (id: string) =>
+      api.patch<{ id: string; is_active: boolean }>(`/masters/rates/${id}/toggle-status`, {}),
+    remove: (id: string, permanent = false) =>
+      api.delete<{ detail?: string }>(`/masters/rates/${id}?permanent=${permanent}`),
   },
 }
 

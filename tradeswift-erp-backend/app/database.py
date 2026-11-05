@@ -333,11 +333,15 @@ def _migrate_contracts_table() -> None:
             conn.execute(text("ALTER TABLE contracts ADD COLUMN broker_rate_type VARCHAR(20) DEFAULT 'FIXED'"))
             cols.add("broker_rate_type")
 
+        if "rate_unit" not in cols:
+            conn.execute(text("ALTER TABLE contracts ADD COLUMN rate_unit VARCHAR(20) NULL"))
+            cols.add("rate_unit")
+
     _migrate_bill_line_items_table()
 
 
 def _migrate_bill_line_items_table() -> None:
-    """Allow contract-only bill lines (despatch optional)."""
+    """Allow contract-only bill lines (despatch optional) and add rate_unit."""
     from sqlalchemy import text
 
     with engine.begin() as conn:
@@ -359,7 +363,16 @@ def _migrate_bill_line_items_table() -> None:
                 }
         except Exception:
             return
-        if not cols or "despatch_id" not in cols:
+        if not cols:
+            return
+
+        if "rate_unit" not in cols:
+            try:
+                conn.execute(text("ALTER TABLE bill_line_items ADD COLUMN rate_unit VARCHAR(20) NULL"))
+            except Exception:
+                pass
+
+        if "despatch_id" not in cols:
             return
 
         if settings.database_url.startswith("sqlite"):
@@ -425,6 +438,16 @@ def _migrate_rate_masters_table() -> None:
         if "brokerage_type" not in cols:
             conn.execute(text("ALTER TABLE rate_masters ADD COLUMN brokerage_type VARCHAR(20) DEFAULT 'FIXED'"))
             cols.add("brokerage_type")
+
+        # Ensure unit column in rate_masters allows NULL for percentage rates
+        try:
+            if not settings.database_url.startswith("sqlite"):
+                conn.execute(text("ALTER TABLE rate_masters MODIFY COLUMN unit ENUM('MT', 'KGS', 'QUINTAL', 'BAGS') NULL"))
+        except Exception:
+            try:
+                conn.execute(text("ALTER TABLE rate_masters MODIFY COLUMN unit VARCHAR(20) NULL"))
+            except Exception:
+                pass
 
 
 def _migrate_users_table() -> None:

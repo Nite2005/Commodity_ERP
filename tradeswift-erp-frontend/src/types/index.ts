@@ -124,10 +124,10 @@ export interface RateMaster {
   commodity_id: string
   rate_type: RateType
   rate: number
-  unit: QtyUnit
-  currency: Currency
+  unit?: QtyUnit | null
+  currency?: Currency
   brokerage_type?: RateType
-  brokerage: number
+  brokerage?: number
   has_pending_approval?: boolean
   is_active: boolean
   created_at: string
@@ -187,6 +187,7 @@ export interface Contract {
   qty_high: number
   qty_unit: QtyUnit
   rate: number
+  rate_unit?: QtyUnit | null
   currency: Currency
   tax_id: string
   payment_term_id: string | null
@@ -250,6 +251,7 @@ export interface BillableContract {
   commodity_name: string | null
   qty_unit: string
   rate: number
+  rate_unit?: string | null
   billing_qty: number
   billed_qty: number
   remaining_billable: number
@@ -292,6 +294,7 @@ export interface BillLineItem {
   commodity_short_name?: string | null
   commodity_name?: string | null
   qty_unit?: string | null
+  rate_unit?: string | null
   seller_name?: string | null
   buyer_name?: string | null
   seller_id?: string | null

@@ -103,9 +103,28 @@ class ApprovalService:
             )
 
         changes = json.loads(req.changes_json)
+        et = str(req.entity_type)
+
+        # Check for deletion approval
+        if changes.get("action", {}).get("new") == "DELETE":
+            target_row = None
+            if et in (EntityType.PARTY, "PARTY"):
+                target_row = db_get(db, Party, req.entity_id)
+            elif et in (EntityType.RATE, "RATE"):
+                target_row = db_get(db, RateMaster, req.entity_id)
+            elif et in (EntityType.CONTRACT, "CONTRACT"):
+                target_row = db_get(db, Contract, req.entity_id)
+            if target_row:
+                db.delete(target_row)
+                db.commit()
+            req.status = ApprovalStatus.APPROVED
+            req.reviewed_by = reviewer_name
+            req.reviewed_at = datetime.utcnow()
+            db.commit()
+            db.refresh(req)
+            return req
 
         # Apply staged changes to target entity
-        et = str(req.entity_type)
         if et in (EntityType.PARTY, "PARTY"):
             party = db_get(db, Party, req.entity_id)
             if not party:

@@ -33,6 +33,7 @@ class ContractCreate(BaseModel):
     qty_high: Decimal = Field(gt=0)
     qty_unit: QtyUnit
     rate: Decimal = Field(gt=0)
+    rate_unit: QtyUnit | None = None
     currency: Currency = Currency.INR
     tax_id: UUID
     payment_term_id: UUID | None = None
@@ -69,6 +70,7 @@ class ContractUpdate(BaseModel):
     qty_high: Decimal | None = Field(default=None, gt=0)
     qty_unit: QtyUnit | None = None
     rate: Decimal | None = Field(default=None, gt=0)
+    rate_unit: QtyUnit | None = None
     currency: Currency | None = None
     tax_id: UUID | None = None
     payment_term_id: UUID | None = None
@@ -102,6 +104,7 @@ class ContractResponse(ORMModel):
     qty_high: Decimal
     qty_unit: QtyUnit
     rate: Decimal
+    rate_unit: QtyUnit | None = None
     currency: Currency
     tax_id: UUID
     payment_term_id: UUID | None

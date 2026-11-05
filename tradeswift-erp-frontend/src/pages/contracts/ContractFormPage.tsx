@@ -25,12 +25,13 @@ const emptyForm = () => ({
   qty_high: '',
   qty_unit: 'MT' as QtyUnit,
   rate: '',
+  rate_unit: 'MT' as QtyUnit,
+  broker_rate_type: 'FIXED' as RateType,
   payment_term_id: '',
   despatch_from: today(),
   despatch_to: today(),
   broker_id: '',
   broker_rate: '0',
-  broker_rate_type: 'FIXED' as RateType,
   tax_id: '',
   notes: '',
 })
@@ -115,6 +116,7 @@ export function ContractFormPage() {
           qty_high: String(c.qty_high),
           qty_unit: c.qty_unit,
           rate: String(c.rate),
+          rate_unit: (c.rate_unit ?? c.qty_unit ?? 'MT') as QtyUnit,
           payment_term_id: c.payment_term_id ?? '',
           despatch_from: c.despatch_from,
           despatch_to: c.despatch_to,
@@ -161,6 +163,7 @@ export function ContractFormPage() {
       qty_high: Number(form.qty_high),
       qty_unit: form.qty_unit,
       rate: Number(form.rate),
+      rate_unit: form.rate_unit || form.qty_unit || 'MT',
       currency: 'INR' as const,
       tax_id: taxId,
       payment_term_id: form.payment_term_id || null,
@@ -329,15 +332,57 @@ export function ContractFormPage() {
                   <input type="number" step="0.01" className={inputClass} value={form.qty_high} onChange={(e) => set('qty_high', e.target.value)} required />
                 </FormField>
                 <FormField label="Qty Unit" required>
-                  <select className={inputClass} value={form.qty_unit} onChange={(e) => set('qty_unit', e.target.value)}>
+                  <select
+                    className={inputClass}
+                    value={form.qty_unit}
+                    onChange={(e) => {
+                      const newUnit = e.target.value as QtyUnit
+                      setForm((f) => ({
+                        ...f,
+                        qty_unit: newUnit,
+                        rate_unit: f.rate_unit === f.qty_unit ? newUnit : f.rate_unit,
+                      }))
+                    }}
+                  >
                     <option value="MT">MT</option>
                     <option value="KGS">KGS</option>
                     <option value="QUINTAL">QUINTAL</option>
                     <option value="BAGS">BAGS</option>
                   </select>
                 </FormField>
-                <FormField label="Rate" required>
-                  <input type="number" step="0.01" className={inputClass} value={form.rate} onChange={(e) => set('rate', e.target.value)} required />
+                <div className="grid grid-cols-2 gap-2">
+                  <FormField label="Rate" required>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className={inputClass}
+                      value={form.rate}
+                      onChange={(e) => set('rate', e.target.value)}
+                      required
+                    />
+                  </FormField>
+                  <FormField label="Rate Unit" required>
+                    <select
+                      className={inputClass}
+                      value={form.rate_unit || 'MT'}
+                      onChange={(e) => set('rate_unit', e.target.value)}
+                    >
+                      <option value="MT">MT</option>
+                      <option value="KGS">KGS</option>
+                      <option value="QUINTAL">QUINTAL</option>
+                      <option value="BAGS">BAGS</option>
+                    </select>
+                  </FormField>
+                </div>
+                <FormField label="Rate Type (Calculation Mode)" required>
+                  <select
+                    className={inputClass}
+                    value={form.broker_rate_type}
+                    onChange={(e) => set('broker_rate_type', e.target.value as RateType)}
+                  >
+                    <option value="FIXED">Fixed (₹ / Unit)</option>
+                    <option value="PERCENTAGE">Percentage (%)</option>
+                  </select>
                 </FormField>
               </div>
             </section>

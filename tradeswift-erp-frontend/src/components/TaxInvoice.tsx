@@ -155,7 +155,7 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
             {formatNum(line.quantity, 3)} {weightUnit}
           </td>
           <td className="py-0.5 px-1 text-right whitespace-nowrap">
-            {formatNum(saudaRate, 2)}/{weightUnit}
+            {formatNum(saudaRate, 2)}/{line.rate_unit ? (line.rate_unit.startsWith('/') ? line.rate_unit.slice(1) : line.rate_unit) : weightUnit}
           </td>
           <td className="py-0.5 px-1 text-right whitespace-nowrap font-medium">
             {isPct ? `${formatNum(brokerRate, 2)}%` : `${formatNum(brokerRate, 2)}/${weightUnit}`}

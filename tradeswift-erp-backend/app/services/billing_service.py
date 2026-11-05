@@ -15,9 +15,34 @@ from app.utils.ids import as_db_id, db_get, uuid_variants
 
 
 class BillingService:
+    @staticmethod
+    def get_unit_multiplier(qty_unit, rate_unit) -> Decimal:
+        q_u = str(getattr(qty_unit, "value", qty_unit) or "MT").upper()
+        r_u = str(getattr(rate_unit, "value", rate_unit) or q_u).upper()
+        if q_u == r_u:
+            return Decimal("1")
+        if q_u == "MT" and r_u in ("KGS", "KG"):
+            return Decimal("1000")
+        if q_u == "MT" and r_u == "QUINTAL":
+            return Decimal("10")
+        if q_u == "QUINTAL" and r_u in ("KGS", "KG"):
+            return Decimal("100")
+        if q_u == "QUINTAL" and r_u == "MT":
+            return Decimal("0.1")
+        if q_u in ("KGS", "KG") and r_u == "MT":
+            return Decimal("0.001")
+        if q_u in ("KGS", "KG") and r_u == "QUINTAL":
+            return Decimal("0.01")
+        return Decimal("1")
+
     @classmethod
     def get_billing_rate(
-        cls, db: Session, party_id: str, commodity_id: str, is_seller: bool
+        cls,
+        db: Session,
+        party_id: str,
+        commodity_id: str,
+        is_seller: bool,
+        target_rate_type: RateType | None = None,
     ) -> tuple[Decimal, RateType] | None:
         party_vars = uuid_variants(party_id)
         comm_vars = uuid_variants(commodity_id)
@@ -26,6 +51,42 @@ class BillingService:
             CustomerType.SELLER if is_seller else CustomerType.BUYER,
         ]
 
+        # 1. Match specific target_rate_type if specified
+        if target_rate_type:
+            rm = (
+                db.query(RateMaster)
+                .filter(
+                    RateMaster.party_id.in_(party_vars),
+                    RateMaster.commodity_id.in_(comm_vars),
+                    RateMaster.customer_type.in_(role_types),
+                    (RateMaster.rate_type == target_rate_type) | (RateMaster.brokerage_type == target_rate_type),
+                    RateMaster.is_active.is_(True),
+                )
+                .order_by(RateMaster.created_at.desc())
+                .first()
+            )
+            if not rm:
+                rm = (
+                    db.query(RateMaster)
+                    .filter(
+                        RateMaster.party_id.in_(party_vars),
+                        RateMaster.commodity_id.in_(comm_vars),
+                        (RateMaster.rate_type == target_rate_type) | (RateMaster.brokerage_type == target_rate_type),
+                        RateMaster.is_active.is_(True),
+                    )
+                    .order_by(RateMaster.created_at.desc())
+                    .first()
+                )
+            if rm:
+                b_val = Decimal(str(rm.brokerage or 0))
+                if b_val > Decimal("0"):
+                    return b_val, rm.brokerage_type or target_rate_type
+                r_val = Decimal(str(rm.rate or 0))
+                if r_val > Decimal("0"):
+                    return r_val, rm.rate_type or target_rate_type
+                return b_val, target_rate_type
+
+        # 2. General lookup
         rm = (
             db.query(RateMaster)
             .filter(
@@ -116,8 +177,9 @@ class BillingService:
             is_seller = bool(party_vars_set.intersection(contract_seller_vars))
             party_role = "Seller" if is_seller else "Buyer"
 
+            target_type = getattr(contract, "broker_rate_type", None)
             rate_info = cls.get_billing_rate(
-                db, party_id, str(contract.commodity_id), is_seller
+                db, party_id, str(contract.commodity_id), is_seller, target_rate_type=target_type
             )
             if rate_info is not None:
                 effective_broker_rate, effective_broker_rate_type = rate_info
@@ -151,6 +213,7 @@ class BillingService:
                     "remaining_billable": remaining,
                     "tax_id": contract.tax_id,
                     "party_role": party_role,
+                    "rate_unit": (contract.rate_unit.value if hasattr(contract.rate_unit, "value") else str(contract.rate_unit)) if getattr(contract, "rate_unit", None) else None,
                     "broker_rate": effective_broker_rate,
                     "broker_rate_type": (
                         effective_broker_rate_type.value
@@ -279,13 +342,17 @@ class BillingService:
                 despatch_id = despatch.id
 
             rate = Decimal(str(contract.rate))
-            line_base = qty * rate
+            r_unit = getattr(contract, "rate_unit", None) or contract.qty_unit
+            multiplier = cls.get_unit_multiplier(contract.qty_unit, r_unit)
+            converted_qty = qty * multiplier
+            line_base = converted_qty * rate
             base_amount += line_base
             # Fetch rate from Billing Rate master
             contract_seller_vars = set(uuid_variants(contract.seller_id))
             line_is_seller = bool(party_vars.intersection(contract_seller_vars))
+            target_type = getattr(contract, "broker_rate_type", None)
             rate_info = cls.get_billing_rate(
-                db, str(party.id), str(contract.commodity_id), line_is_seller
+                db, str(party.id), str(contract.commodity_id), line_is_seller, target_rate_type=target_type
             )
             if rate_info is not None:
                 broker_rate, broker_rate_type = rate_info
@@ -311,6 +378,7 @@ class BillingService:
                     "quantity": qty,
                     "rate": rate,
                     "line_base_amount": line_base,
+                    "rate_unit": (r_unit.value if hasattr(r_unit, "value") else str(r_unit)) if r_unit else None,
                     "broker_rate": broker_rate,
                     "broker_rate_type": broker_rate_type,
                     "line_brokerage_amount": line_brokerage.quantize(Decimal("0.01")),
@@ -361,6 +429,7 @@ class BillingService:
                     contract_id=item["contract_id"],
                     quantity=item["quantity"],
                     rate=item["rate"],
+                    rate_unit=item.get("rate_unit"),
                     line_base_amount=item["line_base_amount"],
                     broker_rate=item["broker_rate"],
                     broker_rate_type=item["broker_rate_type"],
@@ -480,6 +549,7 @@ class BillingService:
                         else None
                     ),
                     "qty_unit": contract.qty_unit.value if contract else None,
+                    "rate_unit": getattr(li, "rate_unit", None) or (contract.rate_unit.value if (contract and getattr(contract, "rate_unit", None)) else None) or (contract.qty_unit.value if contract else None),
                 }
             )
 

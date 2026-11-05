@@ -48,6 +48,7 @@ class BillableContractResponse(BaseModel):
     remaining_billable: Decimal
     tax_id: UUID
     party_role: str | None = None
+    rate_unit: str | None = None
     broker_rate: Decimal | None = None
     broker_rate_type: str | None = None
 
@@ -73,6 +74,7 @@ class BillLineItemResponse(ORMModel):
     bags: int | None = None
     broker_rate: Decimal | None = None
     broker_rate_type: str | None = None
+    rate_unit: str | None = None
     line_brokerage_amount: Decimal | None = None
 
 

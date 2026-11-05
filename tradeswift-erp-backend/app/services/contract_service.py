@@ -115,6 +115,7 @@ class ContractService:
             qty_high=payload.qty_high,
             qty_unit=payload.qty_unit,
             rate=payload.rate,
+            rate_unit=payload.rate_unit,
             currency=payload.currency,
             tax_id=str(tax.id),
             payment_term_id=str(payment_term.id) if payment_term else None,

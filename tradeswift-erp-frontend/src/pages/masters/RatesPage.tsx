@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Plus, Pencil, Trash2, RefreshCw, ShieldCheck, History, Upload } from 'lucide-react'
+import { Plus, Pencil, Trash2, RefreshCw, ShieldCheck, History, Upload, Power, PowerOff } from 'lucide-react'
 import { mastersApi, ApiClientError } from '../../api/client'
 import { ChangeLogModal } from '../../components/ChangeLogModal'
 import { BulkImportModal } from '../../components/BulkImportModal'
@@ -94,10 +94,10 @@ export function RatesPage() {
       commodity_id: row.commodity_id,
       rate_type: row.rate_type ?? 'FIXED',
       rate: String(row.rate),
-      unit: row.unit,
-      currency: row.currency,
+      unit: row.rate_type === 'PERCENTAGE' ? ('' as any) : 'MT',
+      currency: row.currency || 'INR',
       brokerage_type: row.brokerage_type ?? 'FIXED',
-      brokerage: String(row.brokerage),
+      brokerage: String(row.brokerage ?? row.rate),
     })
     setModalOpen(true)
   }
@@ -115,10 +115,10 @@ export function RatesPage() {
       commodity_id: form.commodity_id,
       rate_type: form.rate_type,
       rate: Number(form.rate),
-      unit: form.unit,
-      currency: form.currency,
-      brokerage_type: form.brokerage_type,
-      brokerage: Number(form.brokerage || 0),
+      unit: form.rate_type === 'PERCENTAGE' ? null : 'MT',
+      currency: form.currency || 'INR',
+      brokerage_type: form.rate_type,
+      brokerage: Number(form.rate || 0),
     }
     try {
       if (editing) {
@@ -138,11 +138,35 @@ export function RatesPage() {
     }
   }
 
-  const remove = async (id: string) => {
-    if (!isAdmin) return
-    if (!confirm('Deactivate this billing rate?')) return
-    await mastersApi.rates.remove(id)
-    await load()
+  const handleToggleStatus = async (id: string) => {
+    try {
+      await mastersApi.rates.toggleStatus(id)
+      await load()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to toggle status')
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    const confirmed = window.confirm(
+      'Are you sure you want to permanently delete this billing rate? This action cannot be undone.'
+    )
+    if (!confirmed) return
+    try {
+      const res = await mastersApi.rates.remove(id, true)
+      if (res && res.detail && res.detail.includes('approval')) {
+        alert(
+          'Deletion request submitted for supervisor approval! Since you are signed in as an Employee, permanent deletion requires Administrator authorization in Governance → Approvals.'
+        )
+      } else if (!isAdmin) {
+        alert(
+          'Deletion request submitted for supervisor approval! Since you are signed in as an Employee, permanent deletion requires Administrator authorization in Governance → Approvals.'
+        )
+      }
+      await load()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to delete billing rate')
+    }
   }
 
   const formatRate = (row: RateMaster) => {
@@ -243,16 +267,12 @@ export function RatesPage() {
                 label: 'Rate',
                 render: (r) => formatRate(r as unknown as RateMaster),
               },
-              { key: 'unit', label: 'Unit' },
-              { key: 'currency', label: 'Curr' },
-              {
-                key: 'brokerage',
-                label: 'Brokerage',
+                            {
+                key: 'unit',
+                label: 'Unit',
                 render: (r) => {
                   const item = r as unknown as RateMaster
-                  if (item.brokerage == null || item.brokerage === 0) return '—'
-                  if (item.brokerage_type === 'PERCENTAGE') return `${item.brokerage}% of value`
-                  return `${item.brokerage} / ${item.unit || 'MT'}`
+                  return ((item.rate_type as string) || 'FIXED') === 'PERCENTAGE' ? '—' : (item.unit || 'MT')
                 },
               },
               {
@@ -279,20 +299,29 @@ export function RatesPage() {
                       </button>
                       <button
                         onClick={() => openEdit(rateItem)}
-                        className="rounded p-1.5 text-slate-400 hover:text-brand-600"
+                        className="rounded p-1.5 text-slate-400 hover:text-brand-600 transition-colors"
                         title="Edit Rate"
                       >
                         <Pencil size={16} />
                       </button>
-                      {isAdmin && (r.is_active as boolean) && (
-                        <button
-                          onClick={() => remove(r.id as string)}
-                          className="rounded p-1.5 text-slate-400 hover:text-red-600"
-                          title="Deactivate"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      )}
+                      <button
+                        onClick={() => handleToggleStatus(rateItem.id)}
+                        className={`rounded p-1.5 transition-colors ${
+                          rateItem.is_active
+                            ? 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50'
+                            : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
+                        }`}
+                        title={rateItem.is_active ? 'Click to Deactivate' : 'Click to Activate'}
+                      >
+                        {rateItem.is_active ? <PowerOff size={16} /> : <Power size={16} />}
+                      </button>
+                      <button
+                        onClick={() => handleDelete(rateItem.id)}
+                        className="rounded p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                        title="Permanently Delete Rate"
+                      >
+                        <Trash2 size={16} />
+                      </button>
                     </div>
                   )
                 },
@@ -340,7 +369,7 @@ export function RatesPage() {
           </div>
         )}
         <div className="grid gap-4 sm:grid-cols-2">
-          <FormField label="Party" required>
+          <FormField label="Party Name" required>
             <select
               className={inputClass}
               value={form.party_id}
@@ -366,6 +395,19 @@ export function RatesPage() {
               ))}
             </select>
           </FormField>
+          <FormField label="Customer Type" required>
+            <select
+              className={inputClass}
+              value={form.customer_type}
+              onChange={(e) =>
+                setForm({ ...form, customer_type: e.target.value as CustomerType })
+              }
+            >
+              <option value="BUYER">Buyer</option>
+              <option value="SELLER">Seller</option>
+              <option value="BOTH">Both</option>
+            </select>
+          </FormField>
           <FormField label="Commodity" required>
             <select
               className={inputClass}
@@ -380,28 +422,20 @@ export function RatesPage() {
               ))}
             </select>
           </FormField>
-          <FormField label="Customer Type" required>
-            <select
-              className={inputClass}
-              value={form.customer_type}
-              onChange={(e) =>
-                setForm({ ...form, customer_type: e.target.value as CustomerType })
-              }
-            >
-              <option value="BUYER">Buyer</option>
-              <option value="SELLER">Seller</option>
-              <option value="BOTH">Both</option>
-            </select>
-          </FormField>
           <FormField label="Rate Type" required>
             <select
               className={inputClass}
               value={form.rate_type}
-              onChange={(e) =>
-                setForm({ ...form, rate_type: e.target.value as RateType })
-              }
+              onChange={(e) => {
+                const nextType = e.target.value as RateType
+                setForm({
+                  ...form,
+                  rate_type: nextType,
+                  unit: nextType === 'PERCENTAGE' ? ('' as any) : 'MT',
+                })
+              }}
             >
-              <option value="FIXED">Fixed (amount)</option>
+              <option value="FIXED">Fixed</option>
               <option value="PERCENTAGE">Percentage (%)</option>
             </select>
           </FormField>
@@ -420,61 +454,23 @@ export function RatesPage() {
               onChange={(e) => setForm({ ...form, rate: e.target.value })}
             />
           </FormField>
-          <FormField label="Unit" required>
-            <select
-              className={inputClass}
-              value={form.unit}
-              onChange={(e) => setForm({ ...form, unit: e.target.value as QtyUnit })}
-            >
-              <option value="MT">MT</option>
-              <option value="KGS">KGS</option>
-              <option value="QUINTAL">QUINTAL</option>
-              <option value="BAGS">BAGS</option>
-            </select>
-          </FormField>
-          {!isPercentage && (
-            <FormField label="Currency" required>
-              <select
-                className={inputClass}
-                value={form.currency}
-                onChange={(e) => setForm({ ...form, currency: e.target.value as Currency })}
-              >
-                <option value="INR">INR</option>
-                <option value="USD">USD</option>
-                <option value="EUR">EUR</option>
-              </select>
-            </FormField>
-          )}
-          <FormField label="Brokerage Type" required>
-            <select
-              className={inputClass}
-              value={form.brokerage_type}
-              onChange={(e) =>
-                setForm({ ...form, brokerage_type: e.target.value as RateType })
-              }
-            >
-              <option value="FIXED">Fixed (Per Unit / {form.unit || 'MT'})</option>
-              <option value="PERCENTAGE">Percentage (% of Transaction Value)</option>
-            </select>
-          </FormField>
           <FormField
-            label={form.brokerage_type === 'PERCENTAGE' ? 'Brokerage (% of Value)' : `Brokerage (₹ / ${form.unit || 'MT'})`}
-            hint={
-              form.brokerage_type === 'PERCENTAGE'
-                ? 'Brokerage calculated on total transaction value, not MT quantity'
-                : `Fixed brokerage per ${form.unit || 'MT'}`
-            }
+            label="Unit"
+            required={!isPercentage}
+            hint={isPercentage ? 'Unit is not applicable when Rate Type is Percentage' : 'Fixed brokerage is charged per MT'}
           >
             <input
-              type="number"
-              step="0.01"
-              min="0"
-              max={form.brokerage_type === 'PERCENTAGE' ? 100 : undefined}
-              className={inputClass}
-              value={form.brokerage}
-              onChange={(e) => setForm({ ...form, brokerage: e.target.value })}
+              className={`${inputClass} ${
+                isPercentage
+                  ? 'bg-slate-100 text-slate-400 cursor-not-allowed border-dashed'
+                  : 'bg-slate-50 text-slate-800 font-semibold cursor-not-allowed'
+              }`}
+              value={isPercentage ? '—' : 'MT'}
+              disabled
+              readOnly
             />
           </FormField>
+
         </div>
         <div className="mt-6 flex justify-end gap-3">
           <Button variant="secondary" onClick={() => setModalOpen(false)}>

@@ -107,7 +107,7 @@ export function ContractReport({ contract }: ContractReportProps) {
             </h2>
             <Field label="Quantity Range" value={qtyRange} />
             <Field label="Final Quantity" value={finalQty} />
-            <Field label="Rate" value={`${formatInr(contract.rate)} / ${contract.qty_unit}`} />
+            <Field label="Rate" value={`${formatInr(contract.rate)} / ${contract.rate_unit || contract.qty_unit}`} />
             <Field label="Currency" value={contract.currency} />
           </section>
           <section>

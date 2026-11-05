@@ -1,3 +1,4 @@
+from app.services.billing_service import BillingService
 import csv
 import io
 from datetime import date
@@ -190,10 +191,12 @@ class ReportService:
             role = "SELLER" if str(c.seller_id) in party_keys else "BUYER"
             qty = Decimal(str(c.final_qty if c.final_qty is not None else c.qty_high))
             rate = Decimal(str(c.rate))
-            total_value = (qty * rate).quantize(Decimal("0.01"))
+            r_unit = getattr(c, "rate_unit", None) or c.qty_unit
+            multiplier = BillingService.get_unit_multiplier(c.qty_unit, r_unit)
+            total_value = (qty * multiplier * rate).quantize(Decimal("0.01"))
 
             billed_qty = Decimal(str(c.billed_qty or 0))
-            billed_portion = (billed_qty * rate).quantize(Decimal("0.01"))
+            billed_portion = (billed_qty * multiplier * rate).quantize(Decimal("0.01"))
 
             if c.status == ContractStatus.CANCELLED:
                 adjustments = total_value

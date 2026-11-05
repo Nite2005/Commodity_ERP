@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Pencil, Trash2, RefreshCw, Download, FileCheck, Lock, Upload, ShieldCheck, History } from 'lucide-react'
+import { Plus, Pencil, Trash2, RefreshCw, Download, FileCheck, Lock, Upload, ShieldCheck, History, Power, PowerOff } from 'lucide-react'
 import { mastersApi, ApiClientError } from '../../api/client'
 import type { CustomerType, Party } from '../../types'
 import { useSelectedCompany } from '../../context/SelectedCompanyContext'
@@ -13,25 +13,15 @@ import { ChangeLogModal } from '../../components/ChangeLogModal'
 import { BulkImportModal } from '../../components/BulkImportModal'
 import { useActiveUser } from '../../context/UserContext'
 
-const customerTypes: { value: CustomerType; label: string }[] = [
-  { value: 'REGISTERED', label: 'Registered' },
-  { value: 'UNREGISTERED', label: 'Unregistered' },
-  { value: 'COMPOSITION', label: 'Composition' },
-  { value: 'SEZ', label: 'SEZ' },
-  { value: 'BUYER', label: 'Buyer' },
-  { value: 'SELLER', label: 'Seller' },
-  { value: 'BOTH', label: 'Both' },
-]
-
 const emptyForm = () => ({
   name: '',
   short_name: '',
-  customer_type: 'BUYER' as CustomerType,
+  customer_type: 'BOTH' as CustomerType,
   gst_tin: '',
   address_line: '',
-  city: '',
-  state: '',
-  pincode: '',
+  city: 'Jaipur',
+  state: 'Rajasthan',
+  pincode: '302001',
   mobile: '',
   designation: '',
   account_no: '',
@@ -187,9 +177,9 @@ export function PartiesPage() {
       customer_type: form.customer_type,
       gst_tin: form.gst_tin || null,
       address_line: form.address_line,
-      city: form.city,
-      state: form.state,
-      pincode: form.pincode,
+      city: form.city || 'Jaipur',
+      state: form.state || 'Rajasthan',
+      pincode: form.pincode || '302001',
       mobile: form.mobile || null,
       designation: form.designation || null,
       account_no: form.account_no || null,
@@ -214,11 +204,35 @@ export function PartiesPage() {
     }
   }
 
-  const remove = async (id: string) => {
-    if (!isAdmin) return
-    if (!confirm('Deactivate this party?')) return
-    await mastersApi.parties.remove(id)
-    await load()
+  const handleToggleStatus = async (id: string) => {
+    try {
+      await mastersApi.parties.toggleStatus(id)
+      await load()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to toggle status')
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    const confirmed = window.confirm(
+      'Are you sure you want to permanently delete this party? This action cannot be undone.'
+    )
+    if (!confirmed) return
+    try {
+      const res = await mastersApi.parties.remove(id, true)
+      if (res && res.detail && res.detail.includes('approval')) {
+        alert(
+          'Deletion request submitted for supervisor approval! Since you are signed in as an Employee, permanent deletion requires Administrator authorization in Governance → Approvals.'
+        )
+      } else if (!isAdmin) {
+        alert(
+          'Deletion request submitted for supervisor approval! Since you are signed in as an Employee, permanent deletion requires Administrator authorization in Governance → Approvals.'
+        )
+      }
+      await load()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to delete party')
+    }
   }
 
   return (
@@ -338,7 +352,6 @@ export function PartiesPage() {
                 label: 'IFSC',
                 render: (r) => ((r as unknown as Party).ifsc_code as string) || '—',
               },
-              { key: 'customer_type', label: 'Type' },
               {
                 key: 'status',
                 label: 'Status',
@@ -349,34 +362,46 @@ export function PartiesPage() {
               {
                 key: 'actions',
                 label: '',
-                render: (r) => (
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setHistoryParty(r as unknown as Party)}
-                      className="rounded p-1.5 text-slate-400 hover:text-indigo-600 transition-colors"
-                      title="View Change Log & Supervisor Approvals"
-                    >
-                      <History size={16} />
-                    </button>
-                    <button
-                      onClick={() => openEdit(r as unknown as Party)}
-                      className="rounded p-1.5 text-slate-400 hover:text-brand-600"
-                      title="Edit Party"
-                    >
-                      <Pencil size={16} />
-                    </button>
-                    {isAdmin && (r.is_active as boolean) && (
+                render: (r) => {
+                  const party = r as unknown as Party
+                  return (
+                    <div className="flex items-center gap-1">
                       <button
-                        onClick={() => remove(r.id as string)}
-                        className="rounded p-1.5 text-slate-400 hover:text-red-600"
-                        title="Deactivate"
+                        type="button"
+                        onClick={() => setHistoryParty(party)}
+                        className="rounded p-1.5 text-slate-400 hover:text-indigo-600 transition-colors"
+                        title="View Change Log & Supervisor Approvals"
+                      >
+                        <History size={16} />
+                      </button>
+                      <button
+                        onClick={() => openEdit(party)}
+                        className="rounded p-1.5 text-slate-400 hover:text-brand-600 transition-colors"
+                        title="Edit Party"
+                      >
+                        <Pencil size={16} />
+                      </button>
+                      <button
+                        onClick={() => handleToggleStatus(party.id)}
+                        className={`rounded p-1.5 transition-colors ${
+                          party.is_active
+                            ? 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50'
+                            : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
+                        }`}
+                        title={party.is_active ? 'Click to Deactivate' : 'Click to Activate'}
+                      >
+                        {party.is_active ? <PowerOff size={16} /> : <Power size={16} />}
+                      </button>
+                      <button
+                        onClick={() => handleDelete(party.id)}
+                        className="rounded p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                        title="Permanently Delete Party"
                       >
                         <Trash2 size={16} />
                       </button>
-                    )}
-                  </div>
-                ),
+                    </div>
+                  )
+                },
               },
             ]}
             rows={rows as unknown as Record<string, unknown>[]}
@@ -440,20 +465,7 @@ export function PartiesPage() {
               required
             />
           </FormField>
-          <FormField label="Customer Type" required>
-            <select
-              className={inputClass}
-              value={form.customer_type}
-              onChange={(e) => set('customer_type', e.target.value)}
-            >
-              {customerTypes.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-          </FormField>
-          <FormField label="GST-TIN">
+          <FormField label="GST No.">
             <input
               className={inputClass}
               value={form.gst_tin}
@@ -466,35 +478,17 @@ export function PartiesPage() {
               className={inputClass}
               value={form.address_line}
               onChange={(e) => set('address_line', e.target.value)}
+              placeholder="Complete address (e.g. MI Road, Jaipur, Rajasthan)"
               required
             />
           </FormField>
-          <FormField label="City" required>
+          <FormField label="Contact No.">
             <input
               className={inputClass}
-              value={form.city}
-              onChange={(e) => set('city', e.target.value)}
-              required
+              value={form.mobile}
+              onChange={(e) => set('mobile', e.target.value)}
+              placeholder="Phone or mobile number"
             />
-          </FormField>
-          <FormField label="State" required>
-            <input
-              className={inputClass}
-              value={form.state}
-              onChange={(e) => set('state', e.target.value)}
-              required
-            />
-          </FormField>
-          <FormField label="Pincode" required>
-            <input
-              className={inputClass}
-              value={form.pincode}
-              onChange={(e) => set('pincode', e.target.value)}
-              required
-            />
-          </FormField>
-          <FormField label="Mobile">
-            <input className={inputClass} value={form.mobile} onChange={(e) => set('mobile', e.target.value)} />
           </FormField>
           <FormField label="Designation">
             <input
@@ -511,14 +505,14 @@ export function PartiesPage() {
               placeholder="e.g. HDFC Bank"
             />
           </FormField>
-          <FormField label="Account No">
+          <FormField label="Account No.">
             <input
               className={inputClass}
               value={form.account_no}
               onChange={(e) => set('account_no', e.target.value)}
             />
           </FormField>
-          <FormField label="IFSC Code">
+          <FormField label="IFSC">
             <input
               className={inputClass}
               value={form.ifsc_code}

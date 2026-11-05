@@ -115,7 +115,7 @@ class PartyCreate(BaseModel):
     company_id: UUID
     name: str = Field(min_length=3, max_length=150)
     short_name: str = Field(min_length=2, max_length=50)
-    customer_type: CustomerType
+    customer_type: CustomerType = CustomerType.BOTH
     gst_tin: str | None = Field(default=None, max_length=15)
     gst_apply_date: date | None = None
     address_line: str = Field(max_length=300)
@@ -323,13 +323,17 @@ class RateMasterCreate(BaseModel):
     commodity_id: UUID
     rate_type: RateType = RateType.FIXED
     rate: Decimal = Field(ge=0, default=0)
-    unit: QtyUnit
+    unit: QtyUnit | None = None
     currency: Currency = Currency.INR
     brokerage_type: RateType = RateType.FIXED
     brokerage: Decimal = Field(ge=0, default=0)
 
     @model_validator(mode="after")
     def validate_rate_by_type(self):
+        # Auto-sync brokerage with rate if brokerage was left as default
+        if self.brokerage == Decimal("0") and self.rate > Decimal("0"):
+            self.brokerage = self.rate
+            self.brokerage_type = self.rate_type
         if self.rate_type == RateType.PERCENTAGE and self.rate > Decimal("100"):
             raise ValueError("Percentage rate cannot exceed 100.")
         if self.brokerage_type == RateType.PERCENTAGE and self.brokerage > Decimal("100"):
@@ -374,7 +378,7 @@ class RateMasterResponse(ORMModel):
     commodity_id: UUID
     rate_type: RateType
     rate: Decimal
-    unit: QtyUnit
+    unit: QtyUnit | None = None
     currency: Currency
     brokerage_type: RateType = RateType.FIXED
     brokerage: Decimal

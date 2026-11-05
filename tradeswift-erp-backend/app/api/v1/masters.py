@@ -637,13 +637,46 @@ def update_party(
         return row
 
 
-@router.delete("/parties/{item_id}", status_code=204)
-def delete_party(item_id: str, db: Session = Depends(get_db)):
+@router.patch("/parties/{item_id}/toggle-status")
+def toggle_party_status(item_id: str, db: Session = Depends(get_db)):
     row = db_get(db, Party, item_id)
     if not row:
         raise HTTPException(status_code=404, detail="Party not found")
-    row.is_active = False
+    row.is_active = not row.is_active
     db.commit()
+    db.refresh(row)
+    return {"id": row.id, "is_active": row.is_active}
+
+
+@router.delete("/parties/{item_id}")
+def delete_party(
+    item_id: str,
+    permanent: bool = False,
+    x_supervisor_approval: str | None = Header(default=None),
+    x_requested_by: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    row = db_get(db, Party, item_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Party not found")
+    is_supervisor = is_admin_requester(db, x_supervisor_approval, x_requested_by)
+    if not is_supervisor:
+        ApprovalService.create_change_request(
+            db,
+            entity_type=EntityType.PARTY,
+            entity_id=str(row.id),
+            entity_name=row.name,
+            change_summary=f"Delete party {row.name}",
+            changes_dict={"action": {"old": "ACTIVE" if row.is_active else "INACTIVE", "new": "DELETE", "label": "Action"}},
+            requested_by=x_requested_by or "Employee",
+        )
+        return {"status": "PENDING_APPROVAL", "has_pending_approval": True, "message": "Deletion request routed to Governance Approvals."}
+    if permanent:
+        db.delete(row)
+    else:
+        row.is_active = False
+    db.commit()
+    return {"status": "DELETED"}
 
 
 @router.post("/parties/{item_id}/cancelled-cheque")
@@ -1159,6 +1192,14 @@ def create_rate(payload: RateMasterCreate, db: Session = Depends(get_db)):
     data = payload.model_dump()
     data["party_id"] = party.id
     data["commodity_id"] = commodity.id
+    if data.get("rate") is not None and (data.get("brokerage") is None or data.get("brokerage") == 0):
+        data["brokerage"] = data["rate"]
+    if data.get("rate_type") and not data.get("brokerage_type"):
+        data["brokerage_type"] = data["rate_type"]
+    if data.get("rate_type") == RateType.PERCENTAGE:
+        data["unit"] = None
+    elif not data.get("unit"):
+        data["unit"] = QtyUnit.MT
     row = RateMaster(rate_code=SequenceService.next_code(db, "RATE"), **data)
     db.add(row)
     db.commit()
@@ -1269,6 +1310,10 @@ def update_rate(
         if not c_row:
             raise HTTPException(status_code=400, detail="Commodity not found")
         data["commodity_id"] = c_row.id
+    if data.get("rate_type") == RateType.PERCENTAGE:
+        data["unit"] = None
+    elif data.get("rate_type") == RateType.FIXED and not data.get("unit"):
+        data["unit"] = QtyUnit.MT
 
     FIELD_RATE_LABELS = {
         "rate": "Contract Base Rate",
@@ -1332,10 +1377,43 @@ def update_rate(
         return row
 
 
-@router.delete("/rates/{item_id}", status_code=204)
-def delete_rate(item_id: str, db: Session = Depends(get_db)):
+@router.patch("/rates/{item_id}/toggle-status")
+def toggle_rate_status(item_id: str, db: Session = Depends(get_db)):
     row = db_get(db, RateMaster, item_id)
     if not row:
         raise HTTPException(status_code=404, detail="Rate not found")
-    row.is_active = False
+    row.is_active = not row.is_active
     db.commit()
+    db.refresh(row)
+    return {"id": row.id, "is_active": row.is_active}
+
+
+@router.delete("/rates/{item_id}")
+def delete_rate(
+    item_id: str,
+    permanent: bool = False,
+    x_supervisor_approval: str | None = Header(default=None),
+    x_requested_by: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    row = db_get(db, RateMaster, item_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Rate not found")
+    is_supervisor = is_admin_requester(db, x_supervisor_approval, x_requested_by)
+    if not is_supervisor:
+        ApprovalService.create_change_request(
+            db,
+            entity_type=EntityType.RATE,
+            entity_id=str(row.id),
+            entity_name=f"{row.rate_code} ({row.party.name if row.party else 'Rate'})",
+            change_summary=f"Delete billing rate {row.rate_code}",
+            changes_dict={"action": {"old": "ACTIVE" if row.is_active else "INACTIVE", "new": "DELETE", "label": "Action"}},
+            requested_by=x_requested_by or "Employee",
+        )
+        return {"status": "PENDING_APPROVAL", "has_pending_approval": True, "message": "Deletion request routed to Governance Approvals."}
+    if permanent:
+        db.delete(row)
+    else:
+        row.is_active = False
+    db.commit()
+    return {"status": "DELETED"}
