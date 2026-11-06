@@ -17,6 +17,19 @@ function monthStart() {
   return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10)
 }
 
+function getUnitMultiplier(qtyUnit?: string, rateUnit?: string): number {
+  const q = (qtyUnit || 'MT').toUpperCase()
+  const r = (rateUnit || q).toUpperCase()
+  if (q === r) return 1
+  if (q === 'MT' && (r === 'KGS' || r === 'KG')) return 1000
+  if (q === 'MT' && r === 'QUINTAL') return 10
+  if (q === 'QUINTAL' && (r === 'KGS' || r === 'KG')) return 100
+  if (q === 'QUINTAL' && r === 'MT') return 0.1
+  if ((q === 'KGS' || q === 'KG') && r === 'MT') return 0.001
+  if ((q === 'KGS' || q === 'KG') && r === 'QUINTAL') return 0.01
+  return 1
+}
+
 export function BillGeneratePage() {
   const navigate = useNavigate()
   const { company } = useSelectedCompany()
@@ -96,7 +109,8 @@ export function BillGeneratePage() {
     () =>
       selectedRows.reduce((s, r) => {
         const qty = Number(qtyById[r.id] || 0)
-        return s + qty * Number(r.rate)
+        const mult = getUnitMultiplier(r.qty_unit, r.rate_unit || undefined)
+        return s + qty * mult * Number(r.rate)
       }, 0),
     [selectedRows, qtyById],
   )
@@ -268,7 +282,8 @@ export function BillGeneratePage() {
                   <tbody className="divide-y divide-slate-100">
                     {rows.map((r) => {
                       const qty = Number(qtyById[r.id] || 0)
-                      const base = qty * Number(r.rate)
+                      const mult = getUnitMultiplier(r.qty_unit, r.rate_unit || undefined)
+                      const base = qty * mult * Number(r.rate)
                       return (
                         <tr key={r.id} className="hover:bg-slate-50">
                           <td className="px-4 py-3">
@@ -318,7 +333,7 @@ export function BillGeneratePage() {
                             {r.broker_rate != null && Number(r.broker_rate) > 0
                               ? r.broker_rate_type === 'PERCENTAGE'
                                 ? `${r.broker_rate}%`
-                                : `₹${r.broker_rate} / ${r.qty_unit}`
+                                : `₹${r.broker_rate} / ${r.broker_rate_unit || r.qty_unit}`
                               : '0.00'}
                           </td>
                           <td className="px-4 py-3">{r.rate}</td>

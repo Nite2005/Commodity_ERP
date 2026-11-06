@@ -290,6 +290,7 @@ class BillLineItem(Base, AuditMixin):
     rate_unit: Mapped[str | None] = mapped_column(String(20), nullable=True)
     broker_rate: Mapped[float] = mapped_column(Numeric(12, 2), default=0.0)
     broker_rate_type: Mapped[RateType] = mapped_column(Enum(RateType), default=RateType.FIXED, nullable=False)
+    broker_rate_unit: Mapped[str | None] = mapped_column(String(20), nullable=True)
     line_brokerage_amount: Mapped[float] = mapped_column(Numeric(14, 2), default=0.0)
 
     bill: Mapped[Bill] = relationship(back_populates="line_items")

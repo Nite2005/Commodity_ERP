@@ -259,6 +259,7 @@ export interface BillableContract {
   party_role?: string | null
   broker_rate?: number | null
   broker_rate_type?: string | null
+  broker_rate_unit?: string | null
 }
 
 export interface Bill {
@@ -302,6 +303,7 @@ export interface BillLineItem {
   bags?: number | null
   broker_rate?: number | null
   broker_rate_type?: string | null
+  broker_rate_unit?: string | null
   line_brokerage_amount?: number | null
 }
 

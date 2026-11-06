@@ -372,6 +372,12 @@ def _migrate_bill_line_items_table() -> None:
             except Exception:
                 pass
 
+        if "broker_rate_unit" not in cols:
+            try:
+                conn.execute(text("ALTER TABLE bill_line_items ADD COLUMN broker_rate_unit VARCHAR(20) NULL"))
+            except Exception:
+                pass
+
         if "despatch_id" not in cols:
             return
 

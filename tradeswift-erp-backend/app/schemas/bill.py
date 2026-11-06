@@ -51,6 +51,7 @@ class BillableContractResponse(BaseModel):
     rate_unit: str | None = None
     broker_rate: Decimal | None = None
     broker_rate_type: str | None = None
+    broker_rate_unit: str | None = None
 
 
 class BillLineItemResponse(ORMModel):
@@ -74,6 +75,7 @@ class BillLineItemResponse(ORMModel):
     bags: int | None = None
     broker_rate: Decimal | None = None
     broker_rate_type: str | None = None
+    broker_rate_unit: str | None = None
     rate_unit: str | None = None
     line_brokerage_amount: Decimal | None = None
 

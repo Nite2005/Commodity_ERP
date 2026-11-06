@@ -43,7 +43,7 @@ class BillingService:
         commodity_id: str,
         is_seller: bool,
         target_rate_type: RateType | None = None,
-    ) -> tuple[Decimal, RateType] | None:
+    ) -> tuple[Decimal, RateType, QtyUnit | None] | None:
         party_vars = uuid_variants(party_id)
         comm_vars = uuid_variants(commodity_id)
         role_types = [
@@ -79,12 +79,16 @@ class BillingService:
                 )
             if rm:
                 b_val = Decimal(str(rm.brokerage or 0))
+                b_type = rm.brokerage_type or target_rate_type
+                b_unit = rm.unit or (QtyUnit.MT if b_type == RateType.FIXED else None)
                 if b_val > Decimal("0"):
-                    return b_val, rm.brokerage_type or target_rate_type
+                    return b_val, b_type, b_unit
                 r_val = Decimal(str(rm.rate or 0))
+                r_type = rm.rate_type or target_rate_type
+                r_unit = rm.unit or (QtyUnit.MT if r_type == RateType.FIXED else None)
                 if r_val > Decimal("0"):
-                    return r_val, rm.rate_type or target_rate_type
-                return b_val, target_rate_type
+                    return r_val, r_type, r_unit
+                return b_val, target_rate_type, b_unit
 
         # 2. General lookup
         rm = (
@@ -113,12 +117,17 @@ class BillingService:
             return None
 
         b_val = Decimal(str(rm.brokerage or 0))
+        b_type = rm.brokerage_type or RateType.FIXED
+        b_unit = rm.unit or (QtyUnit.MT if b_type == RateType.FIXED else None)
         if b_val > Decimal("0"):
-            return b_val, rm.brokerage_type
+            return b_val, b_type, b_unit
         r_val = Decimal(str(rm.rate or 0))
+        r_unit = rm.unit or (QtyUnit.MT if rm.rate_type == RateType.FIXED else None)
         if r_val > Decimal("0") and rm.rate_type == RateType.PERCENTAGE:
-            return r_val, rm.rate_type
-        return b_val, rm.brokerage_type or rm.rate_type or RateType.FIXED
+            return r_val, rm.rate_type, r_unit
+        eff_type = rm.brokerage_type or rm.rate_type or RateType.FIXED
+        eff_unit = rm.unit or (QtyUnit.MT if eff_type == RateType.FIXED else None)
+        return b_val, eff_type, eff_unit
     @classmethod
     def list_billable_contracts(
         cls,
@@ -182,15 +191,23 @@ class BillingService:
                 db, party_id, str(contract.commodity_id), is_seller, target_rate_type=target_type
             )
             if rate_info is not None:
-                effective_broker_rate, effective_broker_rate_type = rate_info
+                effective_broker_rate, effective_broker_rate_type, effective_broker_unit = rate_info
             elif contract.broker_rate is not None:
                 effective_broker_rate = Decimal(str(contract.broker_rate))
                 effective_broker_rate_type = (
                     getattr(contract, "broker_rate_type", RateType.FIXED) or RateType.FIXED
                 )
+                effective_broker_unit = contract.qty_unit
             else:
                 effective_broker_rate = Decimal("0")
                 effective_broker_rate_type = RateType.FIXED
+                effective_broker_unit = contract.qty_unit
+
+            b_unit_str = (
+                effective_broker_unit.value
+                if hasattr(effective_broker_unit, "value")
+                else str(effective_broker_unit)
+            ) if effective_broker_unit else None
 
             rows.append(
                 {
@@ -220,6 +237,7 @@ class BillingService:
                         if hasattr(effective_broker_rate_type, "value")
                         else str(effective_broker_rate_type)
                     ),
+                    "broker_rate_unit": b_unit_str,
                 }
             )
         return rows
@@ -355,19 +373,32 @@ class BillingService:
                 db, str(party.id), str(contract.commodity_id), line_is_seller, target_rate_type=target_type
             )
             if rate_info is not None:
-                broker_rate, broker_rate_type = rate_info
+                broker_rate, broker_rate_type, broker_unit = rate_info
             elif contract.broker_rate is not None:
                 broker_rate = Decimal(str(contract.broker_rate))
                 broker_rate_type = getattr(contract, "broker_rate_type", RateType.FIXED) or RateType.FIXED
+                broker_unit = contract.qty_unit
             else:
                 broker_rate = Decimal("0")
                 broker_rate_type = RateType.FIXED
+                broker_unit = contract.qty_unit
+
+            b_unit_str = (
+                broker_unit.value
+                if hasattr(broker_unit, "value")
+                else str(broker_unit)
+            ) if broker_unit else None
+
             if broker_rate_type == RateType.PERCENTAGE:
                 # Percentage brokerage calculated on basis of transaction value: (line_base * broker_rate) / 100
                 line_brokerage = (line_base * broker_rate) / Decimal("100")
             else:
-                # Fixed brokerage calculated on basis of quantity unit: qty * broker_rate
-                line_brokerage = qty * broker_rate
+                # Fixed brokerage calculated with unit multiplier:
+                # If contract qty is in KGS and broker rate is in MT, convert KGS -> MT
+                b_multiplier = cls.get_unit_multiplier(contract.qty_unit, broker_unit or contract.qty_unit)
+                converted_broker_qty = qty * b_multiplier
+                line_brokerage = converted_broker_qty * broker_rate
+
             brokerage_amount += line_brokerage
             line_data.append(
                 {
@@ -381,6 +412,7 @@ class BillingService:
                     "rate_unit": (r_unit.value if hasattr(r_unit, "value") else str(r_unit)) if r_unit else None,
                     "broker_rate": broker_rate,
                     "broker_rate_type": broker_rate_type,
+                    "broker_rate_unit": b_unit_str,
                     "line_brokerage_amount": line_brokerage.quantize(Decimal("0.01")),
                 }
             )
@@ -433,6 +465,7 @@ class BillingService:
                     line_base_amount=item["line_base_amount"],
                     broker_rate=item["broker_rate"],
                     broker_rate_type=item["broker_rate_type"],
+                    broker_rate_unit=item.get("broker_rate_unit"),
                     line_brokerage_amount=item["line_brokerage_amount"],
                 )
             )
@@ -484,6 +517,7 @@ class BillingService:
                 first_contract = contract
 
             # If snapshot exists on the line item, use it directly (immutable historical bill)
+            broker_rate_unit = getattr(li, "broker_rate_unit", None)
             if getattr(li, "broker_rate", None) is not None and getattr(li, "line_brokerage_amount", None) is not None:
                 broker_rate = Decimal(str(li.broker_rate))
                 raw_type = getattr(li, "broker_rate_type", RateType.FIXED) or RateType.FIXED
@@ -496,24 +530,35 @@ class BillingService:
                     db, str(bill.party_id), str(contract.commodity_id), line_is_seller
                 )
                 if rate_info is not None:
-                    broker_rate, broker_rate_type = rate_info
+                    broker_rate, broker_rate_type, broker_unit = rate_info
                 elif contract.broker_rate is not None:
                     broker_rate = Decimal(str(contract.broker_rate))
                     broker_rate_type = (
                         getattr(contract, "broker_rate_type", RateType.FIXED) or RateType.FIXED
                     )
+                    broker_unit = contract.qty_unit
                 else:
                     broker_rate = Decimal("0")
                     broker_rate_type = RateType.FIXED
+                    broker_unit = contract.qty_unit
+                if not broker_rate_unit:
+                    broker_rate_unit = (
+                        broker_unit.value if hasattr(broker_unit, "value") else str(broker_unit)
+                    ) if broker_unit else None
                 if broker_rate_type == RateType.PERCENTAGE:
                     line_brokerage = (Decimal(str(li.line_base_amount or 0)) * broker_rate) / Decimal("100")
                 else:
-                    line_brokerage = Decimal(str(li.quantity or 0)) * broker_rate
+                    b_multiplier = BillingService.get_unit_multiplier(contract.qty_unit, broker_unit or contract.qty_unit)
+                    line_brokerage = (Decimal(str(li.quantity or 0)) * b_multiplier) * broker_rate
             elif contract and contract.broker_rate:
                 broker_rate = Decimal(str(contract.broker_rate))
                 broker_rate_type = (
                     getattr(contract, "broker_rate_type", RateType.FIXED) or RateType.FIXED
                 )
+                if not broker_rate_unit:
+                    broker_rate_unit = (
+                        contract.qty_unit.value if hasattr(contract.qty_unit, "value") else str(contract.qty_unit)
+                    ) if contract.qty_unit else None
                 if broker_rate_type == RateType.PERCENTAGE:
                     line_brokerage = (Decimal(str(li.line_base_amount or 0)) * broker_rate) / Decimal("100")
                 else:
@@ -521,11 +566,13 @@ class BillingService:
             else:
                 broker_rate = Decimal("0")
                 broker_rate_type = RateType.FIXED
+                broker_rate_unit = None
                 line_brokerage = Decimal("0")
 
             lines.append(
                 {
                     **{c.name: getattr(li, c.name) for c in li.__table__.columns},
+                    "broker_rate_unit": broker_rate_unit,
                     "despatch_no": despatch.despatch_no if despatch else None,
                     "despatch_date": despatch.despatch_date if despatch else None,
                     "contract_no": contract.contract_no if contract else None,

@@ -74,7 +74,15 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
     if (item.broker_rate_type === 'PERCENTAGE') {
       return (Number(item.line_base_amount || 0) * rate) / 100
     }
-    return Number(item.quantity || 0) * rate
+    const qUnit = (item.qty_unit || 'MT').toUpperCase()
+    const bUnit = (item.broker_rate_unit || qUnit).toUpperCase()
+    let multiplier = 1
+    if (qUnit === 'KGS' && bUnit === 'MT') multiplier = 0.001
+    else if (qUnit === 'MT' && bUnit === 'KGS') multiplier = 1000
+    else if (qUnit === 'QUINTAL' && bUnit === 'MT') multiplier = 0.1
+    else if (qUnit === 'QUINTAL' && bUnit === 'KGS') multiplier = 100
+    else if (qUnit === 'KGS' && bUnit === 'QUINTAL') multiplier = 0.01
+    return Number(item.quantity || 0) * multiplier * rate
   }
 
   const calcSubtotal = (items: BillLineItem[]) => {
@@ -134,6 +142,7 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
         : line.seller_name || '—'
       const commodity = line.commodity_short_name || line.commodity_name || '—'
       const weightUnit = line.qty_unit || 'M.T'
+      const brokerRateUnit = line.broker_rate_unit || weightUnit
       const saudaRate = Number(line.rate || 0)
       const brokerRate = Number(line.broker_rate ?? 0)
       const isPct = line.broker_rate_type === 'PERCENTAGE'
@@ -158,7 +167,7 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
             {formatNum(saudaRate, 2)}/{line.rate_unit ? (line.rate_unit.startsWith('/') ? line.rate_unit.slice(1) : line.rate_unit) : weightUnit}
           </td>
           <td className="py-0.5 px-1 text-right whitespace-nowrap font-medium">
-            {isPct ? `${formatNum(brokerRate, 2)}%` : `${formatNum(brokerRate, 2)}/${weightUnit}`}
+            {isPct ? `${formatNum(brokerRate, 2)}%` : `${formatNum(brokerRate, 2)}/${brokerRateUnit}`}
           </td>
           <td className="py-0.5 px-1 text-right whitespace-nowrap font-semibold">
             {formatNum(lineBrokerage, 2)}
