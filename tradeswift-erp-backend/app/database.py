@@ -494,6 +494,14 @@ def _migrate_users_table() -> None:
             if count == 0:
                 default_users = [
                     User(
+                        username="admin",
+                        full_name="System Administrator",
+                        email="admin@tradeswift.com",
+                        password="admin123",
+                        role=UserRole.ADMIN,
+                        designation="System Administrator",
+                    ),
+                    User(
                         username="kannu",
                         full_name="Kannu",
                         email="kannu@tradeswift.com",
@@ -533,6 +541,21 @@ def _migrate_users_table() -> None:
                 if ops:
                     ops.email = "ops@tradeswift.com"
                     ops.password = "employee123"
+                adm = session.query(User).filter((User.username == "admin") | (User.email == "admin@tradeswift.com")).first()
+                if not adm:
+                    adm = User(
+                        username="admin",
+                        full_name="System Administrator",
+                        email="admin@tradeswift.com",
+                        password="admin123",
+                        role=UserRole.ADMIN,
+                        designation="System Administrator",
+                        is_active=True,
+                    )
+                    session.add(adm)
+                else:
+                    adm.email = "admin@tradeswift.com"
+                    adm.password = "admin123"
                 session.commit()
         except Exception:
             session.rollback()

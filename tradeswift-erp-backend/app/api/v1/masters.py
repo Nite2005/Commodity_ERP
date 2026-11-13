@@ -4,16 +4,20 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.services.r2_storage import R2StorageService
 
 from app.database import get_db
 from app.models import (
+    Bill,
     Broker,
     Commodity,
     Company,
     Contact,
+    Contract,
     MasterChangeRequest,
     Party,
     PaymentTerm,
@@ -30,21 +34,18 @@ from app.services.approval_service import ApprovalService
 
 def is_admin_requester(db: Session, x_supervisor: str | None, x_user: str | None) -> bool:
     candidates = [c.strip().lower() for c in (x_supervisor, x_user) if c and c.strip()]
-    if any(c in ("kannu", "kanha", "admin") for c in candidates):
-        return True
-    if candidates:
-        user = (
-            db.query(User)
-            .filter(
-                (User.username.in_(candidates)) | (User.email.in_(candidates)),
-                User.role == UserRole.ADMIN,
-                User.is_active.is_(True),
-            )
-            .first()
+    if not candidates:
+        return False
+    user = (
+        db.query(User)
+        .filter(
+            (func.lower(User.username).in_(candidates)) | (func.lower(User.email).in_(candidates)),
+            User.role == UserRole.ADMIN,
+            User.is_active.is_(True),
         )
-        if user:
-            return True
-    return False
+        .first()
+    )
+    return user is not None
 
 from app.schemas.masters import (
     BrokerCreate,
@@ -165,12 +166,30 @@ def update_commodity(
 
 
 @router.delete("/commodities/{item_id}", status_code=204)
-def delete_commodity(item_id: str, db: Session = Depends(get_db)):
+def delete_commodity(item_id: str, permanent: bool = False, db: Session = Depends(get_db)):
     row = db_get(db, Commodity, item_id)
     if not row:
         raise HTTPException(status_code=404, detail="Commodity not found")
-    row.is_active = False
-    db.commit()
+    if permanent:
+        contract_count = db.query(Contract).filter(Contract.commodity_id == row.id).count()
+        rate_count = db.query(RateMaster).filter(RateMaster.commodity_id == row.id).count()
+        if contract_count > 0 or rate_count > 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot permanently delete commodity '{row.commodity_name}' because active contracts or rates reference it. Please deactivate it instead.",
+            )
+        try:
+            db.delete(row)
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot permanently delete commodity '{row.commodity_name}' because other database records reference it. Please deactivate it instead.",
+            )
+    else:
+        row.is_active = False
+        db.commit()
 
 
 @router.get("/units", response_model=list[UnitResponse])
@@ -233,12 +252,29 @@ def update_unit(
 
 
 @router.delete("/units/{item_id}", status_code=204)
-def delete_unit(item_id: str, db: Session = Depends(get_db)):
+def delete_unit(item_id: str, permanent: bool = False, db: Session = Depends(get_db)):
     row = db_get(db, Unit, item_id)
     if not row:
         raise HTTPException(status_code=404, detail="Unit not found")
-    row.is_active = False
-    db.commit()
+    if permanent:
+        contract_count = db.query(Contract).filter(Contract.weightment_unit_id == row.id).count()
+        if contract_count > 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot permanently delete unit '{row.unit_name}' because active contracts reference it. Please deactivate it instead.",
+            )
+        try:
+            db.delete(row)
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot permanently delete unit '{row.unit_name}' because other database records reference it. Please deactivate it instead.",
+            )
+    else:
+        row.is_active = False
+        db.commit()
 
 
 @router.get("/brokers", response_model=list[BrokerResponse])
@@ -306,12 +342,29 @@ def update_broker(
 
 
 @router.delete("/brokers/{item_id}", status_code=204)
-def delete_broker(item_id: str, db: Session = Depends(get_db)):
+def delete_broker(item_id: str, permanent: bool = False, db: Session = Depends(get_db)):
     row = db_get(db, Broker, item_id)
     if not row:
         raise HTTPException(status_code=404, detail="Broker not found")
-    row.is_active = False
-    db.commit()
+    if permanent:
+        contract_count = db.query(Contract).filter(Contract.broker_id == row.id).count()
+        if contract_count > 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot permanently delete broker '{row.name}' because active contracts reference it. Please deactivate it instead.",
+            )
+        try:
+            db.delete(row)
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot permanently delete broker '{row.name}' because other database records reference it. Please deactivate it instead.",
+            )
+    else:
+        row.is_active = False
+        db.commit()
 
 
 @router.get("/taxes", response_model=list[TaxResponse])
@@ -394,12 +447,30 @@ def update_tax(
 
 
 @router.delete("/taxes/{item_id}", status_code=204)
-def delete_tax(item_id: str, db: Session = Depends(get_db)):
+def delete_tax(item_id: str, permanent: bool = False, db: Session = Depends(get_db)):
     row = db_get(db, Tax, item_id)
     if not row:
         raise HTTPException(status_code=404, detail="Tax not found")
-    row.is_active = False
-    db.commit()
+    if permanent:
+        contract_count = db.query(Contract).filter(Contract.tax_id == row.id).count()
+        bill_count = db.query(Bill).filter(Bill.tax_id == row.id).count()
+        if contract_count > 0 or bill_count > 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot permanently delete tax '{row.tax_name}' because active contracts or bills reference it. Please deactivate it instead.",
+            )
+        try:
+            db.delete(row)
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot permanently delete tax '{row.tax_name}' because other database records reference it. Please deactivate it instead.",
+            )
+    else:
+        row.is_active = False
+        db.commit()
 
 
 @router.get("/parties", response_model=list[PartyResponse])
@@ -659,6 +730,28 @@ def delete_party(
     row = db_get(db, Party, item_id)
     if not row:
         raise HTTPException(status_code=404, detail="Party not found")
+
+    if permanent:
+        contracts_count = db.query(Contract).filter((Contract.buyer_id == row.id) | (Contract.seller_id == row.id)).count()
+        bills_count = db.query(Bill).filter(Bill.party_id == row.id).count()
+        rates_count = db.query(RateMaster).filter(RateMaster.party_id == row.id).count()
+        contacts_count = db.query(Contact).filter(Contact.party_id == row.id).count()
+
+        if contracts_count > 0 or bills_count > 0 or rates_count > 0 or contacts_count > 0:
+            reasons = []
+            if contracts_count > 0:
+                reasons.append(f"{contracts_count} contract(s)")
+            if bills_count > 0:
+                reasons.append(f"{bills_count} bill(s)")
+            if rates_count > 0:
+                reasons.append(f"{rates_count} rate master(s)")
+            if contacts_count > 0:
+                reasons.append(f"{contacts_count} contact(s)")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot permanently delete party '{row.name}' because it has {', '.join(reasons)} linked to it. Please deactivate the party instead.",
+            )
+
     is_supervisor = is_admin_requester(db, x_supervisor_approval, x_requested_by)
     if not is_supervisor:
         ApprovalService.create_change_request(
@@ -670,12 +763,26 @@ def delete_party(
             changes_dict={"action": {"old": "ACTIVE" if row.is_active else "INACTIVE", "new": "DELETE", "label": "Action"}},
             requested_by=x_requested_by or "Employee",
         )
-        return {"status": "PENDING_APPROVAL", "has_pending_approval": True, "message": "Deletion request routed to Governance Approvals."}
+        return {
+            "status": "PENDING_APPROVAL",
+            "has_pending_approval": True,
+            "message": "Deletion request routed to Governance Approvals.",
+            "detail": "Deletion request routed to Governance Approvals.",
+        }
+
     if permanent:
-        db.delete(row)
+        try:
+            db.delete(row)
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot permanently delete party '{row.name}' because active database records reference it. Please deactivate the party instead.",
+            )
     else:
         row.is_active = False
-    db.commit()
+        db.commit()
     return {"status": "DELETED"}
 
 
@@ -928,10 +1035,28 @@ def select_company(item_id: str, db: Session = Depends(get_db)):
 
 
 @router.delete("/companies/{item_id}", status_code=204)
-def delete_company(item_id: str, db: Session = Depends(get_db)):
+def delete_company(item_id: str, permanent: bool = False, db: Session = Depends(get_db)):
     row = db_get(db, Company, item_id)
     if not row:
         raise HTTPException(status_code=404, detail="Company not found")
+    if permanent:
+        party_count = db.query(Party).filter(Party.company_id == row.id).count()
+        contract_count = db.query(Contract).filter(Contract.company_id == row.id).count()
+        if party_count > 0 or contract_count > 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot permanently delete company '{row.name}' because parties or contracts are associated with it. Please deactivate it instead.",
+            )
+        try:
+            db.delete(row)
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot permanently delete company '{row.name}' because other database records reference it. Please deactivate it instead.",
+            )
+        return
     was_selected = row.is_selected
     row.is_active = False
     row.is_selected = False
@@ -1052,6 +1177,7 @@ def update_contact(
 @router.delete("/contacts/{item_id}", status_code=204)
 def delete_contact(
     item_id: str,
+    permanent: bool = False,
     x_supervisor_approval: str | None = Header(default=None),
     x_requested_by: str | None = Header(default=None),
     db: Session = Depends(get_db),
@@ -1061,8 +1187,16 @@ def delete_contact(
     row = db_get(db, Contact, item_id)
     if not row:
         raise HTTPException(status_code=404, detail="Contact not found")
-    row.is_active = False
-    db.commit()
+    if permanent:
+        try:
+            db.delete(row)
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(status_code=400, detail=f"Cannot permanently delete contact '{row.contact_name}' because other database records reference it.")
+    else:
+        row.is_active = False
+        db.commit()
 
 
 @router.get("/payment-terms", response_model=list[PaymentTermResponse])
@@ -1128,12 +1262,29 @@ def update_payment_term(
 
 
 @router.delete("/payment-terms/{item_id}", status_code=204)
-def delete_payment_term(item_id: str, db: Session = Depends(get_db)):
+def delete_payment_term(item_id: str, permanent: bool = False, db: Session = Depends(get_db)):
     row = db_get(db, PaymentTerm, item_id)
     if not row:
         raise HTTPException(status_code=404, detail="Payment term not found")
-    row.is_active = False
-    db.commit()
+    if permanent:
+        contract_count = db.query(Contract).filter(Contract.payment_term_id == row.id).count()
+        if contract_count > 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot permanently delete payment term '{row.term_name}' because active contracts reference it. Please deactivate it instead.",
+            )
+        try:
+            db.delete(row)
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot permanently delete payment term '{row.term_name}' because other database records reference it. Please deactivate it instead.",
+            )
+    else:
+        row.is_active = False
+        db.commit()
 
 
 @router.get("/rates", response_model=list[RateMasterResponse])
@@ -1410,10 +1561,23 @@ def delete_rate(
             changes_dict={"action": {"old": "ACTIVE" if row.is_active else "INACTIVE", "new": "DELETE", "label": "Action"}},
             requested_by=x_requested_by or "Employee",
         )
-        return {"status": "PENDING_APPROVAL", "has_pending_approval": True, "message": "Deletion request routed to Governance Approvals."}
+        return {
+            "status": "PENDING_APPROVAL",
+            "has_pending_approval": True,
+            "message": "Deletion request routed to Governance Approvals.",
+            "detail": "Deletion request routed to Governance Approvals.",
+        }
     if permanent:
-        db.delete(row)
+        try:
+            db.delete(row)
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot permanently delete billing rate '{row.rate_code}' because other database records reference it. Please deactivate it instead.",
+            )
     else:
         row.is_active = False
-    db.commit()
+        db.commit()
     return {"status": "DELETED"}

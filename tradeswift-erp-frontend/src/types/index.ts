@@ -334,6 +334,7 @@ export interface BillDetail extends Bill {
   company_bank_name?: string | null
   company_account_no?: string | null
   company_ifsc_code?: string | null
+  sac_code?: string | null
   round_off_amount?: number | null
   line_items: BillLineItem[]
 }

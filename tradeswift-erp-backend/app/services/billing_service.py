@@ -419,8 +419,8 @@ class BillingService:
 
         assert first_contract is not None
         company = first_contract.company or party.company
-        company_state = getattr(company, "state", None) or "Rajasthan"
-        party_state = party.state or "Rajasthan"
+        company_state = TaxEngine.resolve_state(company) or getattr(company, "state", None) or "Rajasthan"
+        party_state = party.state or TaxEngine.resolve_state(party) or company_state
 
         supply_type = TaxEngine.get_supply_type(
             company_state,
@@ -614,6 +614,11 @@ class BillingService:
         rounded_gross = exact_gross.quantize(Decimal("1"), rounding="ROUND_HALF_UP").quantize(Decimal("0.01"))
         round_off_amount = (rounded_gross - exact_gross).quantize(Decimal("0.01"))
 
+        company_gst = getattr(company, "gst_tin", None) if company else None
+        company_pan = getattr(company, "pan_no", None) if company else None
+        if not company_pan and company_gst and len(company_gst) >= 12:
+            company_pan = company_gst[2:12]
+
         return {
             **{c.name: getattr(bill, c.name) for c in bill.__table__.columns},
             "gross_amount": rounded_gross,
@@ -636,13 +641,14 @@ class BillingService:
             "company_name": getattr(company, "name", None) if company else None,
             "company_address": getattr(company, "address", None) if company else None,
             "company_city": getattr(company, "city", None) if company else None,
-            "company_state": getattr(company, "state", None) if company else None,
+            "company_state": (TaxEngine.resolve_state(company) or getattr(company, "state", None)) if company else None,
             "company_pincode": getattr(company, "pincode", None) if company else None,
-            "company_gstin": getattr(company, "gst_tin", None) if company else None,
-            "company_pan": getattr(company, "pan_no", None) if company else None,
-            "company_phone": getattr(company, "phone", None) or getattr(company, "mobile", None) if company else None,
+            "company_gstin": company_gst,
+            "company_pan": company_pan,
+            "company_phone": (getattr(company, "phone", None) or getattr(company, "mobile", None)) if company else None,
             "company_bank_name": getattr(company, "bank_name", None) if company else None,
             "company_account_no": getattr(company, "account_no", None) if company else None,
             "company_ifsc_code": getattr(company, "ifsc_code", None) if company else None,
+            "sac_code": "996111",
             "line_items": lines,
         }

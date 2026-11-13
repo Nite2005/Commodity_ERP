@@ -126,6 +126,7 @@ class BillDetailResponse(BillResponse):
     company_bank_name: str | None = None
     company_account_no: str | None = None
     company_ifsc_code: str | None = None
+    sac_code: str | None = "996111"
     round_off_amount: Decimal | None = None
     line_items: list[BillLineItemResponse] = []
 

@@ -3,6 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -115,8 +116,21 @@ class ApprovalService:
             elif et in (EntityType.CONTRACT, "CONTRACT"):
                 target_row = db_get(db, Contract, req.entity_id)
             if target_row:
-                db.delete(target_row)
-                db.commit()
+                try:
+                    db.delete(target_row)
+                    db.commit()
+                except IntegrityError:
+                    db.rollback()
+                    name = (
+                        getattr(target_row, "name", None)
+                        or getattr(target_row, "rate_code", None)
+                        or getattr(target_row, "contract_number", None)
+                        or req.entity_name
+                    )
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Cannot delete {et.lower()} '{name}' because active database records reference it. Please reject this request and deactivate the record instead.",
+                    )
             req.status = ApprovalStatus.APPROVED
             req.reviewed_by = reviewer_name
             req.reviewed_at = datetime.utcnow()

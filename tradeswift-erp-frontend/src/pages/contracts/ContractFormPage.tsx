@@ -347,7 +347,7 @@ export function ContractFormPage() {
                     <option value="MT">MT</option>
                     <option value="KGS">KGS</option>
                     <option value="QUINTAL">QUINTAL</option>
-                    <option value="BAGS">BAGS</option>
+                    {form.qty_unit === 'BAGS' && <option value="BAGS">BAGS (Legacy)</option>}
                   </select>
                 </FormField>
                 <div className="grid grid-cols-2 gap-2">
@@ -370,7 +370,7 @@ export function ContractFormPage() {
                       <option value="MT">MT</option>
                       <option value="KGS">KGS</option>
                       <option value="QUINTAL">QUINTAL</option>
-                      <option value="BAGS">BAGS</option>
+                      {form.rate_unit === 'BAGS' && <option value="BAGS">BAGS (Legacy)</option>}
                     </select>
                   </FormField>
                 </div>

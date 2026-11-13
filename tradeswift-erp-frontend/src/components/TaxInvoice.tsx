@@ -11,20 +11,21 @@ interface TaxInvoiceProps {
 }
 
 export function TaxInvoice({ bill }: TaxInvoiceProps) {
-  const pan = bill.company_pan || TRADESWIFT_COMPANY.pan
-  const mobile = bill.company_phone || TRADESWIFT_COMPANY.phone
-  const gstin = bill.company_gstin || TRADESWIFT_COMPANY.gstin
+  const gstin = bill.company_gstin?.trim() || '—'
+  const pan =
+    bill.company_pan?.trim() ||
+    (gstin && gstin !== '—' && gstin.length >= 12 ? gstin.slice(2, 12) : '—')
+  const mobile = bill.company_phone?.trim() || '—'
   const companyName = bill.company_name || TRADESWIFT_COMPANY.name
   const companyAddress =
-    [bill.company_address, bill.company_city, bill.company_state]
-      .filter(Boolean)
-      .join(', ') ||
-    `${TRADESWIFT_COMPANY.address}, ${TRADESWIFT_COMPANY.city} ${TRADESWIFT_COMPANY.state}`
+    bill.company_address ||
+    [bill.company_city, bill.company_state].filter(Boolean).join(', ') ||
+    '—'
   const devotionalHeading = TRADESWIFT_COMPANY.devotional_heading || 'Jai shri Shyam'
 
-  const bankName = bill.company_bank_name || TRADESWIFT_COMPANY.bank_name
-  const accountNo = bill.company_account_no || TRADESWIFT_COMPANY.account_no
-  const ifscCode = bill.company_ifsc_code || TRADESWIFT_COMPANY.ifsc_code
+  const bankName = bill.company_bank_name?.trim() ? bill.company_bank_name.trim() : '—'
+  const accountNo = bill.company_account_no?.trim() ? bill.company_account_no.trim() : '—'
+  const ifscCode = bill.company_ifsc_code?.trim() ? bill.company_ifsc_code.trim() : '—'
 
   const partyName = bill.party_name || 'Party Name'
   const partyGstin = bill.party_gst_tin && bill.party_gst_tin.trim() !== '-' ? bill.party_gst_tin : '—'
@@ -34,7 +35,7 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
   const partyStateCode =
     partyGstin && partyGstin !== '—' && partyGstin.length >= 2
       ? partyGstin.slice(0, 2)
-      : '09'
+      : null
 
   // Segregate lines by seller / buyer counterparty roles dynamically
   const sellerLines: BillLineItem[] = []
@@ -77,11 +78,13 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
     const qUnit = (item.qty_unit || 'MT').toUpperCase()
     const bUnit = (item.broker_rate_unit || qUnit).toUpperCase()
     let multiplier = 1
-    if (qUnit === 'KGS' && bUnit === 'MT') multiplier = 0.001
-    else if (qUnit === 'MT' && bUnit === 'KGS') multiplier = 1000
+    if (qUnit === bUnit) multiplier = 1
+    else if (qUnit === 'MT' && (bUnit === 'KGS' || bUnit === 'KG')) multiplier = 1000
+    else if (qUnit === 'MT' && bUnit === 'QUINTAL') multiplier = 10
+    else if (qUnit === 'QUINTAL' && (bUnit === 'KGS' || bUnit === 'KG')) multiplier = 100
     else if (qUnit === 'QUINTAL' && bUnit === 'MT') multiplier = 0.1
-    else if (qUnit === 'QUINTAL' && bUnit === 'KGS') multiplier = 100
-    else if (qUnit === 'KGS' && bUnit === 'QUINTAL') multiplier = 0.01
+    else if ((qUnit === 'KGS' || qUnit === 'KG') && bUnit === 'MT') multiplier = 0.001
+    else if ((qUnit === 'KGS' || qUnit === 'KG') && bUnit === 'QUINTAL') multiplier = 0.01
     return Number(item.quantity || 0) * multiplier * rate
   }
 
@@ -105,11 +108,11 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
     : Number(bill.brokerage_amount || 0)
 
   // Determine inter-state (IGST) vs intra-state (CGST+SGST)
-  const companyState = (bill.company_state || TRADESWIFT_COMPANY.state || '').trim()
+  const companyState = (bill.company_state || '').trim()
   const partyStateClean = (partyState || '').trim()
 
   const isInterState =
-    partyStateClean && companyState
+    partyStateClean && companyState && partyStateClean !== '—' && companyState !== '—'
       ? partyStateClean.toLowerCase() !== companyState.toLowerCase()
       : bill.supply_type === 'INTER_STATE'
 
@@ -237,11 +240,11 @@ export function TaxInvoice({ bill }: TaxInvoiceProps) {
           </div>
           <div className="flex">
             <span className="w-20 font-semibold">State</span>
-            <span>: {partyState} (Code: {partyStateCode})</span>
+            <span>: {partyState}{partyStateCode ? ` (Code: ${partyStateCode})` : ''}</span>
           </div>
           <div className="flex">
             <span className="w-20 font-semibold">SAC Code</span>
-            <span>:</span>
+            <span>: {bill.sac_code || '996111'}</span>
           </div>
         </div>
 
